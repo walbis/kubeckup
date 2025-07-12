@@ -759,8 +759,8 @@ func (cb *ClusterBackup) uploadResource(namespace, resourceType, name string, re
 		return fmt.Errorf("failed to marshal resource to YAML: %v", err)
 	}
 
-	objectPath := fmt.Sprintf("%s/%s/%s/%s/%s.yaml",
-		cb.config.ClusterDomain,
+	// Multi-cluster centralized path structure: clusterbackup/{cluster-name}/{namespace}/{resource-type}/{resource-name}.yaml
+	objectPath := fmt.Sprintf("clusterbackup/%s/%s/%s/%s.yaml",
 		cb.config.ClusterName,
 		namespace,
 		resourceType,

@@ -1,0 +1,184 @@
+---
+# Central Git-Sync CronJob
+# Deploy this on ONLY ONE cluster (preferably management/central cluster)
+# This job will consolidate backups from all clusters and push to Git
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: git-sync-central
+  namespace: backup-system
+  labels:
+    app: git-sync
+    component: central-sync
+spec:
+  schedule: "30 2 * * *"  # Daily at 2:30 AM (30 minutes after backups)
+  timeZone: "UTC"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 1800  # 30 minutes timeout
+      template:
+        metadata:
+          labels:
+            app: git-sync
+            component: central-sync
+        spec:
+          serviceAccountName: git-sync
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            fsGroup: 1001
+          containers:
+          - name: git-sync
+            image: git-sync:latest
+            imagePullPolicy: Always
+            env:
+            # MinIO Configuration (read from all clusters)
+            - name: MINIO_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: git-sync-secrets
+                  key: minio-endpoint
+            - name: MINIO_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: git-sync-secrets
+                  key: minio-bucket
+            - name: MINIO_USE_SSL
+              valueFrom:
+                secretKeyRef:
+                  name: git-sync-secrets
+                  key: minio-use-ssl
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: git-sync-secrets
+                  key: minio-access-key
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: git-sync-secrets
+                  key: minio-secret-key
+            
+            # Git Configuration (central repository)
+            - name: GIT_REPOSITORY
+              valueFrom:
+                secretKeyRef:
+                  name: git-sync-secrets
+                  key: git-repository
+            - name: GIT_BRANCH
+              valueFrom:
+                secretKeyRef:
+                  name: git-sync-secrets
+                  key: git-branch
+            - name: GIT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: git-sync-secrets
+                  key: git-username
+            - name: GIT_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: git-sync-secrets
+                  key: git-email
+            - name: GIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: git-sync-secrets
+                  key: git-token
+            
+            # Working directory
+            - name: WORK_DIR
+              valueFrom:
+                secretKeyRef:
+                  name: git-sync-secrets
+                  key: work-dir
+            - name: RETRY_ATTEMPTS
+              valueFrom:
+                secretKeyRef:
+                  name: git-sync-secrets
+                  key: retry-attempts
+            - name: RETRY_DELAY
+              valueFrom:
+                secretKeyRef:
+                  name: git-sync-secrets
+                  key: retry-delay
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+              capabilities:
+                drop:
+                - ALL
+            volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: workspace
+              mountPath: /workspace
+            - name: git-secrets
+              mountPath: /etc/git-secrets
+              readOnly: true
+          volumes:
+          - name: tmp
+            emptyDir: {}
+          - name: workspace
+            emptyDir:
+              sizeLimit: 2Gi
+          - name: git-secrets
+            secret:
+              secretName: git-sync-secrets
+              defaultMode: 0400
+---
+# Git-Sync Service Account and RBAC
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: git-sync
+  namespace: backup-system
+  labels:
+    app: git-sync
+    component: central-sync
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: git-sync-reader
+  labels:
+    app: git-sync
+    component: central-sync
+rules:
+# Minimal permissions for git-sync (read-only access to check cluster info)
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["list", "get"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+  resourceNames: ["backup-config"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: git-sync-binding
+  labels:
+    app: git-sync
+    component: central-sync
+subjects:
+- kind: ServiceAccount
+  name: git-sync
+  namespace: backup-system
+roleRef:
+  kind: ClusterRole
+  name: git-sync-reader
+  apiGroup: rbac.authorization.k8s.io
