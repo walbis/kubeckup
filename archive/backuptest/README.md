@@ -1,1 +1,0 @@
-# OpenShift Cluster Backup Repository

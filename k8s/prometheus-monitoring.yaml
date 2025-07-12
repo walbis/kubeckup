@@ -1,0 +1,95 @@
+# Prometheus ServiceMonitor for Backup System
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: backup-system-metrics
+  namespace: backup-system
+  labels:
+    app: cluster-backup
+spec:
+  selector:
+    matchLabels:
+      app: cluster-backup
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-metrics-service
+  namespace: backup-system
+  labels:
+    app: cluster-backup
+spec:
+  selector:
+    app: cluster-backup
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: git-sync-metrics-service
+  namespace: backup-system
+  labels:
+    app: git-sync
+spec:
+  selector:
+    app: git-sync
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+---
+# Prometheus Alerting Rules
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: backup-alerts
+  namespace: backup-system
+  labels:
+    app: cluster-backup
+spec:
+  groups:
+  - name: backup.rules
+    rules:
+    - alert: BackupJobFailed
+      expr: increase(cluster_backup_errors_total[1h]) > 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Kubernetes Backup Job Failed"
+        description: "Backup job has failed {{ $value }} times in the last hour for cluster {{ $labels.cluster }}"
+    
+    - alert: BackupJobNotRunning
+      expr: time() - cluster_backup_last_success_timestamp > 86400
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Backup Job Not Running"
+        description: "No successful backup in the last 24 hours for cluster {{ $labels.cluster }}"
+    
+    - alert: GitSyncFailed
+      expr: increase(git_sync_errors_total[1h]) > 0
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Git Sync Failed"
+        description: "Git sync has failed {{ $value }} times in the last hour"
+    
+    - alert: HighBackupDuration
+      expr: cluster_backup_duration_seconds > 3600
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Backup Taking Too Long"
+        description: "Backup for cluster {{ $labels.cluster }} took {{ $value }} seconds to complete"
