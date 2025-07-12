@@ -1,0 +1,148 @@
+# Production Multi-Cluster Configuration Example
+# Deploy this configuration on each cluster with unique cluster.name
+
+# Common configuration for all clusters
+cluster:
+  name: "CHANGE-ME"  # Set unique name per cluster
+  domain: "company.local"
+
+# Container images  
+image:
+  backup:
+    registry: "registry.company.com"
+    repository: "infrastructure/cluster-backup"
+    tag: "v1.0.0"
+    pullPolicy: Always
+  gitSync:
+    registry: "registry.company.com"
+    repository: "infrastructure/git-sync"
+    tag: "v1.0.0"
+    pullPolicy: Always
+
+# MinIO configuration (same for all clusters)
+minio:
+  endpoint: "minio.company.com:9000"
+  bucket: "cluster-backups"
+  useSSL: true
+  credentials:
+    accessKey: "CHANGE-ME"
+    secretKey: "CHANGE-ME"
+
+# Backup service (enabled on all clusters)
+backup:
+  enabled: true
+  schedule: "0 1 * * *"  # 1 AM daily
+  filtering:
+    mode: "hybrid"
+    includeResources:
+      - deployments
+      - services
+      - configmaps
+      - secrets
+      - ingresses
+      - persistentvolumeclaims
+      - serviceaccounts
+    excludeResources:
+      - events
+      - nodes
+      - endpoints
+    excludeNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - monitoring
+      - logging
+    includeOpenShiftResources: true
+    includeCRDs:
+      - applications.argoproj.io
+      - workflows.argoproj.io
+      - routes.route.openshift.io
+  config:
+    batchSize: 100
+    retryAttempts: 3
+    logLevel: "info"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+# Git-sync service (enable on ONLY ONE cluster)
+gitSync:
+  enabled: false  # Set to true on central cluster only
+  schedule: "0 2 * * *"  # After backup completes
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+# Git configuration
+git:
+  enabled: true
+  repository: "https://github.com/company/cluster-backups.git"
+  branch: "main"
+  user:
+    name: "cluster-backup-bot"
+    email: "devops@company.com"
+  auth:
+    token: "CHANGE-ME"
+
+# Monitoring (enabled in production)
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    labels:
+      release: prometheus
+  prometheusRule:
+    enabled: true
+    rules:
+      backupFailure: true
+      backupNotRunning: true
+      gitSyncFailure: true
+      highBackupDuration: true
+
+# Security hardening
+security:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    fsGroup: 1001
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+
+# Persistence for large clusters
+persistence:
+  enabled: true
+  storageClass: "fast-ssd"
+  backupSize: "5Gi"
+  gitSyncSize: "10Gi"
+
+# Production resource allocation
+rbac:
+  create: true
+  annotations:
+    description: "Production cluster backup RBAC"
+
+serviceAccount:
+  create: true
+  annotations:
+    description: "Production cluster backup service account"
+
+# Additional labels for monitoring
+extra:
+  labels:
+    environment: "production"
+    team: "infrastructure"
+    backup-system: "cluster-backup"

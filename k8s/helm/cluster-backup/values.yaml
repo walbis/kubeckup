@@ -1,0 +1,264 @@
+# Default values for cluster-backup
+# This is a YAML-formatted file.
+
+# Global configuration
+global:
+  # Image registry settings
+  imageRegistry: ""
+  imagePullSecrets: []
+  # Namespace override
+  namespaceOverride: ""
+
+# Cluster configuration
+cluster:
+  # Unique cluster identifier (REQUIRED)
+  name: "my-cluster"
+  # Cluster domain
+  domain: "cluster.local"
+
+# Image configuration
+image:
+  backup:
+    registry: docker.io
+    repository: your-org/cluster-backup
+    tag: "latest"
+    pullPolicy: Always
+  gitSync:
+    registry: docker.io
+    repository: your-org/git-sync
+    tag: "latest"
+    pullPolicy: Always
+
+# MinIO configuration
+minio:
+  # MinIO server endpoint (REQUIRED)
+  endpoint: "minio.example.com:9000"
+  # MinIO bucket name
+  bucket: "cluster-backups"
+  # Use SSL/TLS for MinIO connection
+  useSSL: true
+  # MinIO credentials (REQUIRED)
+  credentials:
+    # Access key for MinIO
+    accessKey: "your-access-key"
+    # Secret key for MinIO
+    secretKey: "your-secret-key"
+
+# Git configuration (for git-sync service)
+git:
+  # Enable git synchronization
+  enabled: true
+  # Git repository URL (REQUIRED if git.enabled=true)
+  repository: "https://github.com/your-org/cluster-backups.git"
+  # Git branch
+  branch: "main"
+  # Git user configuration
+  user:
+    name: "cluster-backup-bot"
+    email: "backup@yourcompany.com"
+  # Git authentication
+  auth:
+    # GitHub/GitLab token (REQUIRED if git.enabled=true)
+    token: "ghp_your_github_token_here"
+    # SSH private key (alternative to token)
+    sshPrivateKey: ""
+
+# Backup service configuration
+backup:
+  # Enable backup service
+  enabled: true
+  # Backup schedule (cron format)
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  # Resource filtering configuration
+  filtering:
+    # Filtering mode: whitelist, blacklist, or hybrid
+    mode: "hybrid"
+    # Resources to include (whitelist/hybrid mode)
+    includeResources:
+      - deployments
+      - services
+      - configmaps
+      - secrets
+      - persistentvolumeclaims
+    # Resources to exclude (blacklist/hybrid mode)
+    excludeResources:
+      - events
+      - nodes
+      - endpoints
+    # Namespaces to include
+    includeNamespaces: []
+    # Namespaces to exclude
+    excludeNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+    # Include OpenShift resources
+    includeOpenShiftResources: true
+    # Custom Resource Definitions to include
+    includeCRDs:
+      - workflows.argoproj.io
+      - routes.route.openshift.io
+  # Advanced configuration
+  config:
+    # Batch size for processing
+    batchSize: 50
+    # Retry attempts for failed operations
+    retryAttempts: 3
+    # Retry delay between attempts
+    retryDelay: "5s"
+    # Log level (debug, info, warn, error)
+    logLevel: "info"
+    # Additional exclude namespaces
+    additionalExcludeNamespaces: []
+  # Resource limits and requests
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  # Node selector
+  nodeSelector: {}
+  # Tolerations
+  tolerations: []
+  # Affinity
+  affinity: {}
+
+# Git-sync service configuration
+gitSync:
+  # Enable git-sync service (should be enabled on only one cluster)
+  enabled: false
+  # Git-sync schedule (cron format)
+  schedule: "0 3 * * *"  # Daily at 3 AM (after backup)
+  # Working directory path
+  workDir: "/workspace"
+  # Retry configuration
+  config:
+    # Retry attempts for failed operations
+    retryAttempts: 3
+    # Retry delay between attempts
+    retryDelay: "5s"
+    # Log level (debug, info, warn, error)
+    logLevel: "info"
+  # Resource limits and requests
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # Node selector
+  nodeSelector: {}
+  # Tolerations
+  tolerations: []
+  # Affinity
+  affinity: {}
+
+# RBAC configuration
+rbac:
+  # Create RBAC resources
+  create: true
+  # Annotations for RBAC resources
+  annotations: {}
+
+# Service Account configuration
+serviceAccount:
+  # Create service account
+  create: true
+  # Annotations for service account
+  annotations: {}
+  # Name of the service account (if not created, must exist)
+  name: ""
+
+# Monitoring configuration
+monitoring:
+  # Enable monitoring components
+  enabled: true
+  # Enable ServiceMonitor for Prometheus Operator
+  serviceMonitor:
+    enabled: true
+    # Additional labels for ServiceMonitor
+    labels: {}
+    # Scrape interval
+    interval: 30s
+    # Scrape timeout
+    scrapeTimeout: 10s
+  # Enable PrometheusRule for alerting
+  prometheusRule:
+    enabled: true
+    # Additional labels for PrometheusRule
+    labels: {}
+    # Alert rules configuration
+    rules:
+      # Enable backup failure alerts
+      backupFailure: true
+      # Enable backup not running alerts
+      backupNotRunning: true
+      # Enable git sync failure alerts
+      gitSyncFailure: true
+      # Enable high backup duration alerts
+      highBackupDuration: true
+  # Service configuration for metrics
+  service:
+    # Service type
+    type: ClusterIP
+    # Service port
+    port: 8080
+    # Additional annotations
+    annotations: {}
+
+# Security configuration
+security:
+  # Pod Security Context
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    fsGroup: 1001
+  # Container Security Context
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+  # Network policies
+  networkPolicy:
+    enabled: false
+    # Ingress rules
+    ingress: []
+    # Egress rules
+    egress: []
+
+# Persistence configuration
+persistence:
+  # Enable persistence for working directories
+  enabled: true
+  # Storage class
+  storageClass: ""
+  # Access mode
+  accessMode: ReadWriteOnce
+  # Size for backup working directory
+  backupSize: 1Gi
+  # Size for git-sync working directory
+  gitSyncSize: 2Gi
+
+# Additional configuration
+extra:
+  # Additional environment variables for backup service
+  backupEnvVars: {}
+  # Additional environment variables for git-sync service
+  gitSyncEnvVars: {}
+  # Additional labels for all resources
+  labels: {}
+  # Additional annotations for all resources
+  annotations: {}
+
+# Development and testing
+development:
+  # Enable development mode (disables some security features)
+  enabled: false
+  # Override image pull policy for development
+  imagePullPolicy: "IfNotPresent"

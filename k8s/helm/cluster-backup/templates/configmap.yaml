@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cluster-backup.fullname" . }}-config
+  namespace: {{ include "cluster-backup.namespace" . }}
+  labels:
+    {{- include "cluster-backup.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+  annotations:
+    {{- include "cluster-backup.annotations" . | nindent 4 }}
+data:
+  # Filtering configuration
+  filtering-mode: {{ .Values.backup.filtering.mode | quote }}
+  
+  {{- if .Values.backup.filtering.includeResources }}
+  include-resources: |
+    {{- range .Values.backup.filtering.includeResources }}
+    {{ . }}
+    {{- end }}
+  {{- end }}
+  
+  {{- if .Values.backup.filtering.excludeResources }}
+  exclude-resources: |
+    {{- range .Values.backup.filtering.excludeResources }}
+    {{ . }}
+    {{- end }}
+  {{- end }}
+  
+  {{- if .Values.backup.filtering.includeNamespaces }}
+  include-namespaces: |
+    {{- range .Values.backup.filtering.includeNamespaces }}
+    {{ . }}
+    {{- end }}
+  {{- end }}
+  
+  {{- if .Values.backup.filtering.excludeNamespaces }}
+  exclude-namespaces: |
+    {{- range .Values.backup.filtering.excludeNamespaces }}
+    {{ . }}
+    {{- end }}
+    {{- range .Values.backup.config.additionalExcludeNamespaces }}
+    {{ . }}
+    {{- end }}
+  {{- end }}
+  
+  # OpenShift resources
+  include-openshift-resources: {{ .Values.backup.filtering.includeOpenShiftResources | quote }}
+  
+  {{- if .Values.backup.filtering.includeCRDs }}
+  include-crds: |
+    {{- range .Values.backup.filtering.includeCRDs }}
+    {{ . }}
+    {{- end }}
+  {{- end }}
+  
+  # Advanced configuration
+  batch-size: {{ .Values.backup.config.batchSize | quote }}
+  retry-attempts: {{ .Values.backup.config.retryAttempts | quote }}
+  retry-delay: {{ .Values.backup.config.retryDelay | quote }}
+  log-level: {{ .Values.backup.config.logLevel | quote }}

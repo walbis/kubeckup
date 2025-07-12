@@ -1,0 +1,71 @@
+🎉 Cluster Backup System has been successfully deployed!
+
+📊 Configuration Summary:
+- Cluster Name: {{ .Values.cluster.name }}
+- Namespace: {{ include "cluster-backup.namespace" . }}
+- Backup Service: {{ if .Values.backup.enabled }}✅ Enabled{{ else }}❌ Disabled{{ end }}
+- Git-Sync Service: {{ if .Values.gitSync.enabled }}✅ Enabled{{ else }}❌ Disabled{{ end }}
+- Monitoring: {{ if .Values.monitoring.enabled }}✅ Enabled{{ else }}❌ Disabled{{ end }}
+
+🚀 Deployment Information:
+{{- if .Values.backup.enabled }}
+- Backup Schedule: {{ .Values.backup.schedule }}
+- Filtering Mode: {{ .Values.backup.filtering.mode }}
+- MinIO Bucket: {{ .Values.minio.bucket }}
+{{- end }}
+
+{{- if .Values.gitSync.enabled }}
+- Git-Sync Schedule: {{ .Values.gitSync.schedule }}
+- Git Repository: {{ .Values.git.repository }}
+- Git Branch: {{ .Values.git.branch }}
+{{- end }}
+
+📈 Monitoring Endpoints:
+{{- if .Values.monitoring.enabled }}
+- Backup Metrics: http://{{ include "cluster-backup.fullname" . }}-backup-metrics:{{ .Values.monitoring.service.port }}/metrics
+{{- if .Values.gitSync.enabled }}
+- Git-Sync Metrics: http://{{ include "cluster-backup.fullname" . }}-git-sync-metrics:{{ .Values.monitoring.service.port }}/metrics
+{{- end }}
+{{- end }}
+
+🔍 Useful Commands:
+
+# Check backup job status
+kubectl get cronjob {{ include "cluster-backup.fullname" . }}-backup -n {{ include "cluster-backup.namespace" . }}
+
+# View backup logs
+kubectl logs -l app.kubernetes.io/name={{ include "cluster-backup.name" . }},app.kubernetes.io/component=backup -n {{ include "cluster-backup.namespace" . }}
+
+{{- if .Values.gitSync.enabled }}
+# Check git-sync job status
+kubectl get cronjob {{ include "cluster-backup.fullname" . }}-git-sync -n {{ include "cluster-backup.namespace" . }}
+
+# View git-sync logs
+kubectl logs -l app.kubernetes.io/name={{ include "cluster-backup.name" . }},app.kubernetes.io/component=git-sync -n {{ include "cluster-backup.namespace" . }}
+{{- end }}
+
+# View backup configuration
+kubectl get configmap {{ include "cluster-backup.fullname" . }}-config -n {{ include "cluster-backup.namespace" . }} -o yaml
+
+{{- if .Values.monitoring.enabled }}
+# Check metrics
+kubectl port-forward svc/{{ include "cluster-backup.fullname" . }}-backup-metrics {{ .Values.monitoring.service.port }}:{{ .Values.monitoring.service.port }} -n {{ include "cluster-backup.namespace" . }}
+curl http://localhost:{{ .Values.monitoring.service.port }}/metrics
+{{- end }}
+
+⚠️  Important Notes:
+{{- if not .Values.gitSync.enabled }}
+- Git-Sync is disabled. Enable it on only ONE cluster to avoid conflicts.
+{{- else }}
+- Git-Sync is enabled. Ensure this is deployed on only ONE cluster.
+{{- end }}
+- Update MinIO credentials in the secret after deployment if needed.
+{{- if .Values.git.enabled }}
+- Update Git authentication token in the secret after deployment if needed.
+{{- end }}
+- Configure backup filtering in the ConfigMap as needed for your environment.
+
+📚 Documentation:
+- Backup Service: https://github.com/walbis/kubeckup/blob/main/code/backup/README.md
+- Git-Sync Service: https://github.com/walbis/kubeckup/blob/main/code/git-sync/README.md
+- Main Documentation: https://github.com/walbis/kubeckup/blob/main/README.md

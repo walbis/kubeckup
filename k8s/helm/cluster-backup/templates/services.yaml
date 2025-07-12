@@ -1,0 +1,55 @@
+{{- if .Values.monitoring.enabled }}
+---
+# Backup Metrics Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cluster-backup.fullname" . }}-backup-metrics
+  namespace: {{ include "cluster-backup.namespace" . }}
+  labels:
+    {{- include "cluster-backup.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+  annotations:
+    {{- include "cluster-backup.annotations" . | nindent 4 }}
+    {{- with .Values.monitoring.service.annotations }}
+    {{ toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.monitoring.service.type }}
+  ports:
+  - name: metrics
+    port: {{ .Values.monitoring.service.port }}
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    {{- include "cluster-backup.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+
+{{- if .Values.gitSync.enabled }}
+---
+# Git-Sync Metrics Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cluster-backup.fullname" . }}-git-sync-metrics
+  namespace: {{ include "cluster-backup.namespace" . }}
+  labels:
+    {{- include "cluster-backup.labels" . | nindent 4 }}
+    app.kubernetes.io/component: git-sync
+  annotations:
+    {{- include "cluster-backup.annotations" . | nindent 4 }}
+    {{- with .Values.monitoring.service.annotations }}
+    {{ toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.monitoring.service.type }}
+  ports:
+  - name: metrics
+    port: {{ .Values.monitoring.service.port }}
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    {{- include "cluster-backup.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: git-sync
+{{- end }}
+{{- end }}

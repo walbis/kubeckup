@@ -1,0 +1,47 @@
+{{- if .Values.persistence.enabled }}
+---
+# Backup Persistent Volume Claim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "cluster-backup.fullname" . }}-backup-pvc
+  namespace: {{ include "cluster-backup.namespace" . }}
+  labels:
+    {{- include "cluster-backup.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+  annotations:
+    {{- include "cluster-backup.annotations" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.backupSize }}
+
+{{- if .Values.gitSync.enabled }}
+---
+# Git-Sync Persistent Volume Claim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "cluster-backup.fullname" . }}-git-sync-pvc
+  namespace: {{ include "cluster-backup.namespace" . }}
+  labels:
+    {{- include "cluster-backup.labels" . | nindent 4 }}
+    app.kubernetes.io/component: git-sync
+  annotations:
+    {{- include "cluster-backup.annotations" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.gitSyncSize }}
+{{- end }}
+{{- end }}

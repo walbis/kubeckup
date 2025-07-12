@@ -1,0 +1,23 @@
+apiVersion: v2
+name: cluster-backup
+description: Production-ready multi-cluster Kubernetes backup system with MinIO storage and Git synchronization
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/walbis/kubeckup
+sources:
+  - https://github.com/walbis/kubeckup
+keywords:
+  - backup
+  - kubernetes
+  - openshift
+  - multi-cluster
+  - minio
+  - git-sync
+  - monitoring
+maintainers:
+  - name: Cluster Backup Team
+    email: backup-team@yourcompany.com
+annotations:
+  category: Infrastructure
+  licenses: MIT

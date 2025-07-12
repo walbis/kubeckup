@@ -1,0 +1,17 @@
+{{- if eq .Release.Namespace "default" }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "cluster-backup.namespace" . }}
+  labels:
+    {{- include "cluster-backup.labels" . | nindent 4 }}
+    name: {{ include "cluster-backup.namespace" . }}
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+  annotations:
+    {{- include "cluster-backup.annotations" . | nindent 4 }}
+    kubernetes.io/description: "Multi-Cluster Backup System"
+    kubernetes.io/display-name: "Cluster Backup System"
+    kubernetes.io/managed-by: "helm"
+{{- end }}

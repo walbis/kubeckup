@@ -1,0 +1,36 @@
+# Simple Single Cluster Configuration
+# Minimal setup for testing or small environments
+
+cluster:
+  name: "my-cluster"
+
+minio:
+  endpoint: "minio.example.com:9000"
+  useSSL: false  # For testing environments
+  credentials:
+    accessKey: "minioadmin"
+    secretKey: "minioadmin"
+
+backup:
+  enabled: true
+  schedule: "0 2 * * *"
+  filtering:
+    mode: "blacklist"
+    excludeResources:
+      - events
+      - nodes
+
+gitSync:
+  enabled: true
+  schedule: "0 3 * * *"
+
+git:
+  repository: "https://github.com/my-org/backups.git"
+  auth:
+    token: "ghp_your_token_here"
+
+monitoring:
+  enabled: true
+
+development:
+  enabled: true  # Relaxed security for testing
