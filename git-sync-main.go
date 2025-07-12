@@ -89,8 +89,8 @@ func startGitSyncMetricsServer() {
 }
 
 func loadGitSyncConfig() (*GitSyncConfig, error) {
-	// Use temp directory instead of mounted workspace to avoid permission issues
-	workDir := "/tmp/git-sync-work"
+	// Use environment variable for work directory, fallback to temp
+	workDir := getEnvOrDefault("WORK_DIR", "/tmp/git-sync-work")
 
 	config := &GitSyncConfig{
 		MinIOEndpoint:  getEnvOrDefault("MINIO_ENDPOINT", ""),
@@ -113,8 +113,9 @@ func loadGitSyncConfig() (*GitSyncConfig, error) {
 		return nil, fmt.Errorf("MinIO configuration is incomplete")
 	}
 
+	// Git repository is optional - if not provided, only MinIO download will be performed
 	if config.GitRepository == "" {
-		return nil, fmt.Errorf("Git repository URL is required")
+		log.Println("No git repository configured - will run in download-only mode")
 	}
 
 	return config, nil
@@ -194,6 +195,19 @@ func (gs *GitSync) Run() error {
 		return fmt.Errorf("failed to setup git config: %v", err)
 	}
 
+	// Skip git operations if repository is not configured
+	if gs.config.GitRepository == "" {
+		log.Println("No git repository configured, performing MinIO download only")
+		clusterCount, err := gs.downloadAndMergeBackups()
+		if err != nil {
+			gs.metrics.SyncErrors.Inc()
+			return fmt.Errorf("failed to download backups: %v", err)
+		}
+		log.Printf("Download-only mode completed successfully: %d clusters processed", clusterCount)
+		gs.metrics.ClustersBackedUp.Set(float64(clusterCount))
+		return nil
+	}
+
 	if err := gs.cloneOrPullRepository(); err != nil {
 		gs.metrics.SyncErrors.Inc()
 		return fmt.Errorf("failed to clone/pull repository: %v", err)
@@ -247,18 +261,26 @@ func (gs *GitSync) cleanup() {
 }
 
 func (gs *GitSync) setupGitConfig() error {
-	commands := [][]string{
-		{"git", "config", "--global", "user.name", gs.config.GitUsername},
-		{"git", "config", "--global", "user.email", gs.config.GitEmail},
-		{"git", "config", "--global", "init.defaultBranch", "main"},
-		{"git", "config", "--global", "safe.directory", "*"},
+	// Create a local git config in the work directory to avoid read-only filesystem issues
+	gitConfigPath := filepath.Join(gs.config.WorkDir, ".gitconfig")
+	
+	gitConfigContent := fmt.Sprintf(`[user]
+	name = %s
+	email = %s
+[init]
+	defaultBranch = main
+[safe]
+	directory = *
+`, gs.config.GitUsername, gs.config.GitEmail)
+
+	if err := os.WriteFile(gitConfigPath, []byte(gitConfigContent), 0644); err != nil {
+		return fmt.Errorf("failed to write git config: %v", err)
 	}
 
-	for _, cmd := range commands {
-		if err := gs.runCommand(cmd...); err != nil {
-			return fmt.Errorf("failed to run git config command %v: %v", cmd, err)
-		}
-	}
+	// Set GIT_CONFIG_GLOBAL to use our local config file
+	os.Setenv("GIT_CONFIG_GLOBAL", gitConfigPath)
+	
+	log.Printf("Git config set up in work directory: %s", gitConfigPath)
 
 	// Only setup SSH key if it exists (for HTTPS we don't need it)
 	if gs.config.SSHKeyPath != "" {
@@ -300,18 +322,32 @@ gitlab.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCsj2bNKTBSpIYDEGk9KxsGh3mySTRgM
 func (gs *GitSync) cloneOrPullRepository() error {
 	repoDir := filepath.Join(gs.config.WorkDir, "repository")
 	
-	// Create authenticated URL for HTTPS if token is provided
+	// Check if authentication is available for private repositories
 	authURL := gs.config.GitRepository
+	hasAuth := false
+	
 	if gs.config.GitToken != "" && strings.HasPrefix(gs.config.GitRepository, "https://") {
 		// Convert https://github.com/user/repo.git to https://token@github.com/user/repo.git
 		authURL = strings.Replace(gs.config.GitRepository, "https://", fmt.Sprintf("https://%s@", gs.config.GitToken), 1)
+		hasAuth = true
+	} else if gs.config.SSHKeyPath != "" {
+		hasAuth = true
 	}
 
 	if _, err := os.Stat(repoDir); os.IsNotExist(err) {
 		log.Println("Cloning repository for incremental sync...")
-		// Clone with full history for proper diff detection
+		
+		// Try to clone with authentication first, then fallback to public access
 		if err := gs.runCommand("git", "clone", "-b", gs.config.GitBranch, authURL, repoDir); err != nil {
-			return fmt.Errorf("failed to clone repository: %v", err)
+			if hasAuth {
+				return fmt.Errorf("failed to clone repository with authentication: %v", err)
+			} else {
+				// If no auth provided, try public access (might work for public repos)
+				log.Printf("No authentication provided, attempting public clone...")
+				if err := gs.runCommand("git", "clone", "-b", gs.config.GitBranch, gs.config.GitRepository, repoDir); err != nil {
+					return fmt.Errorf("failed to clone repository (no authentication): %v - please provide GIT_TOKEN or SSH key for private repositories", err)
+				}
+			}
 		}
 		log.Println("Repository cloned successfully")
 		return nil

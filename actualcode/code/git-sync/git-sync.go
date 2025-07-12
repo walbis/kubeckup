@@ -89,8 +89,8 @@ func startGitSyncMetricsServer() {
 }
 
 func loadGitSyncConfig() (*GitSyncConfig, error) {
-	// Use temp directory instead of mounted workspace to avoid permission issues
-	workDir := "/tmp/git-sync-work"
+	// Use environment variable for work directory, fallback to temp
+	workDir := getEnvOrDefault("WORK_DIR", "/tmp/git-sync-work")
 
 	config := &GitSyncConfig{
 		MinIOEndpoint:  getEnvOrDefault("MINIO_ENDPOINT", ""),
@@ -113,8 +113,9 @@ func loadGitSyncConfig() (*GitSyncConfig, error) {
 		return nil, fmt.Errorf("MinIO configuration is incomplete")
 	}
 
+	// Git repository is optional - if not provided, only MinIO download will be performed
 	if config.GitRepository == "" {
-		return nil, fmt.Errorf("Git repository URL is required")
+		log.Println("No git repository configured - will run in download-only mode")
 	}
 
 	return config, nil
@@ -194,6 +195,19 @@ func (gs *GitSync) Run() error {
 		return fmt.Errorf("failed to setup git config: %v", err)
 	}
 
+	// Skip git operations if repository is not configured
+	if gs.config.GitRepository == "" {
+		log.Println("No git repository configured, performing MinIO download only")
+		clusterCount, err := gs.downloadAndMergeBackups()
+		if err != nil {
+			gs.metrics.SyncErrors.Inc()
+			return fmt.Errorf("failed to download backups: %v", err)
+		}
+		log.Printf("Download-only mode completed successfully: %d clusters processed", clusterCount)
+		gs.metrics.ClustersBackedUp.Set(float64(clusterCount))
+		return nil
+	}
+
 	if err := gs.cloneOrPullRepository(); err != nil {
 		gs.metrics.SyncErrors.Inc()
 		return fmt.Errorf("failed to clone/pull repository: %v", err)
@@ -247,18 +261,26 @@ func (gs *GitSync) cleanup() {
 }
 
 func (gs *GitSync) setupGitConfig() error {
-	commands := [][]string{
-		{"git", "config", "--global", "user.name", gs.config.GitUsername},
-		{"git", "config", "--global", "user.email", gs.config.GitEmail},
-		{"git", "config", "--global", "init.defaultBranch", "main"},
-		{"git", "config", "--global", "safe.directory", "*"},
+	// Create a local git config in the work directory to avoid read-only filesystem issues
+	gitConfigPath := filepath.Join(gs.config.WorkDir, ".gitconfig")
+	
+	gitConfigContent := fmt.Sprintf(`[user]
+	name = %s
+	email = %s
+[init]
+	defaultBranch = main
+[safe]
+	directory = *
+`, gs.config.GitUsername, gs.config.GitEmail)
+
+	if err := os.WriteFile(gitConfigPath, []byte(gitConfigContent), 0644); err != nil {
+		return fmt.Errorf("failed to write git config: %v", err)
 	}
 
-	for _, cmd := range commands {
-		if err := gs.runCommand(cmd...); err != nil {
-			return fmt.Errorf("failed to run git config command %v: %v", cmd, err)
-		}
-	}
+	// Set GIT_CONFIG_GLOBAL to use our local config file
+	os.Setenv("GIT_CONFIG_GLOBAL", gitConfigPath)
+	
+	log.Printf("Git config set up in work directory: %s", gitConfigPath)
 
 	// Only setup SSH key if it exists (for HTTPS we don't need it)
 	if gs.config.SSHKeyPath != "" {
@@ -300,24 +322,54 @@ gitlab.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCsj2bNKTBSpIYDEGk9KxsGh3mySTRgM
 func (gs *GitSync) cloneOrPullRepository() error {
 	repoDir := filepath.Join(gs.config.WorkDir, "repository")
 	
-	// Create authenticated URL for HTTPS if token is provided
+	// Check if authentication is available for private repositories
 	authURL := gs.config.GitRepository
+	hasAuth := false
+	
 	if gs.config.GitToken != "" && strings.HasPrefix(gs.config.GitRepository, "https://") {
 		// Convert https://github.com/user/repo.git to https://token@github.com/user/repo.git
 		authURL = strings.Replace(gs.config.GitRepository, "https://", fmt.Sprintf("https://%s@", gs.config.GitToken), 1)
+		hasAuth = true
+	} else if gs.config.SSHKeyPath != "" {
+		hasAuth = true
 	}
 
 	if _, err := os.Stat(repoDir); os.IsNotExist(err) {
-		log.Println("Cloning repository...")
-		return gs.runCommand("git", "clone", "--depth", "1", "-b", gs.config.GitBranch, authURL, repoDir)
+		log.Println("Cloning repository for incremental sync...")
+		
+		// Try to clone with authentication first, then fallback to public access
+		if err := gs.runCommand("git", "clone", "-b", gs.config.GitBranch, authURL, repoDir); err != nil {
+			if hasAuth {
+				return fmt.Errorf("failed to clone repository with authentication: %v", err)
+			} else {
+				// If no auth provided, try public access (might work for public repos)
+				log.Printf("No authentication provided, attempting public clone...")
+				if err := gs.runCommand("git", "clone", "-b", gs.config.GitBranch, gs.config.GitRepository, repoDir); err != nil {
+					return fmt.Errorf("failed to clone repository (no authentication): %v - please provide GIT_TOKEN or SSH key for private repositories", err)
+				}
+			}
+		}
+		log.Println("Repository cloned successfully")
+		return nil
 	}
 
-	log.Println("Repository exists, pulling latest changes...")
-	return gs.runCommandInDir(repoDir, "git", "pull", "origin", gs.config.GitBranch)
+	log.Println("Repository exists, pulling latest changes for incremental sync...")
+	// Reset any local changes first
+	if err := gs.runCommandInDir(repoDir, "git", "reset", "--hard", "HEAD"); err != nil {
+		log.Printf("Warning: failed to reset repository: %v", err)
+	}
+	
+	// Pull latest changes
+	if err := gs.runCommandInDir(repoDir, "git", "pull", "origin", gs.config.GitBranch); err != nil {
+		return fmt.Errorf("failed to pull latest changes: %v", err)
+	}
+	
+	log.Println("Repository updated successfully")
+	return nil
 }
 
 func (gs *GitSync) downloadAndMergeBackups() (int, error) {
-	log.Println("Downloading backups from MinIO...")
+	log.Println("Downloading multi-cluster backups from MinIO...")
 
 	backupDir := filepath.Join(gs.config.WorkDir, "backups")
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
@@ -326,21 +378,22 @@ func (gs *GitSync) downloadAndMergeBackups() (int, error) {
 
 	clusters := make(map[string]bool)
 	objectCh := gs.minioClient.ListObjects(gs.ctx, gs.config.MinIOBucket, minio.ListObjectsOptions{
+		Prefix:    "clusterbackup/", // Only process centralized cluster backups
 		Recursive: true,
 	})
 
+	downloadCount := 0
 	for object := range objectCh {
 		if object.Err != nil {
 			log.Printf("Error listing object: %v", object.Err)
 			continue
 		}
 
+		// Parse new structure: clusterbackup/{cluster-name}/{namespace}/{resource-type}/{resource-name}.yaml
 		parts := strings.Split(object.Key, "/")
-		if len(parts) >= 2 {
-			clusterDomain := parts[0]
+		if len(parts) >= 2 && parts[0] == "clusterbackup" {
 			clusterName := parts[1]
-			clusterKey := fmt.Sprintf("%s/%s", clusterDomain, clusterName)
-			clusters[clusterKey] = true
+			clusters[clusterName] = true
 		}
 
 		localPath := filepath.Join(backupDir, object.Key)
@@ -354,8 +407,11 @@ func (gs *GitSync) downloadAndMergeBackups() (int, error) {
 			continue
 		}
 
+		downloadCount++
 		gs.metrics.FilesProcessed.Inc()
 	}
+
+	log.Printf("Downloaded %d files from %d clusters", downloadCount, len(clusters))
 
 	repoDir := filepath.Join(gs.config.WorkDir, "repository")
 	if err := gs.mergeBackupsToRepo(backupDir, repoDir); err != nil {
@@ -428,21 +484,41 @@ func (gs *GitSync) copyFile(src, dst string) error {
 func (gs *GitSync) commitAndPushChanges() error {
 	repoDir := filepath.Join(gs.config.WorkDir, "repository")
 
-	log.Println("Adding changes to git...")
+	log.Println("Analyzing changes for incremental push...")
+	
+	// Add all changes
 	if err := gs.runCommandInDir(repoDir, "git", "add", "."); err != nil {
-		return err
+		return fmt.Errorf("failed to add changes: %v", err)
 	}
 
-	log.Println("Checking for changes...")
+	// Check if there are any changes to commit
 	if err := gs.runCommandInDir(repoDir, "git", "diff-index", "--quiet", "HEAD", "--"); err == nil {
-		log.Println("No changes to commit")
+		log.Println("No changes detected - skipping commit and push")
 		return nil
 	}
 
-	commitMessage := fmt.Sprintf("Automated backup sync - %s", time.Now().Format("2006-01-02 15:04:05 UTC"))
-	log.Printf("Committing changes: %s", commitMessage)
+	// Get detailed change statistics
+	changeStats, err := gs.getChangeStatistics(repoDir)
+	if err != nil {
+		log.Printf("Warning: failed to get change statistics: %v", err)
+		changeStats = "Changes detected"
+	}
+
+	// Create detailed commit message with change summary
+	commitMessage := fmt.Sprintf(`Multi-cluster backup sync - %s
+
+%s
+
+Incremental sync from MinIO to Git repository.
+Only changed files are included in this commit.
+
+Generated by KubeBackup Git-Sync Service`, 
+		time.Now().Format("2006-01-02 15:04:05 UTC"),
+		changeStats)
+
+	log.Printf("Committing incremental changes...")
 	if err := gs.runCommandInDir(repoDir, "git", "commit", "-m", commitMessage); err != nil {
-		return err
+		return fmt.Errorf("failed to commit changes: %v", err)
 	}
 
 	// Set up authenticated remote for push if token is provided
@@ -453,8 +529,30 @@ func (gs *GitSync) commitAndPushChanges() error {
 		}
 	}
 
-	log.Println("Pushing changes...")
-	return gs.runCommandInDir(repoDir, "git", "push", "origin", gs.config.GitBranch)
+	log.Println("Pushing incremental changes to remote repository...")
+	if err := gs.runCommandInDir(repoDir, "git", "push", "origin", gs.config.GitBranch); err != nil {
+		return fmt.Errorf("failed to push changes: %v", err)
+	}
+
+	log.Println("Incremental push completed successfully")
+	return nil
+}
+
+func (gs *GitSync) getChangeStatistics(repoDir string) (string, error) {
+	cmd := exec.Command("git", "diff", "--cached", "--stat")
+	cmd.Dir = repoDir
+	
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	
+	stats := strings.TrimSpace(string(output))
+	if stats == "" {
+		return "No detailed statistics available", nil
+	}
+	
+	return stats, nil
 }
 
 func (gs *GitSync) runCommand(args ...string) error {

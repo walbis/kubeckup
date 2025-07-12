@@ -1,0 +1,87 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-multicluster-backup
+  namespace: test-backup
+  labels:
+    app: cluster-backup
+    component: multicluster-test
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: cluster-backup
+        component: multicluster-test
+    spec:
+      serviceAccountName: cluster-backup
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+      - name: cluster-backup
+        image: cluster-backup:multicluster-test
+        imagePullPolicy: Never
+        env:
+        # Multi-cluster configuration - Test with unique cluster name
+        - name: CLUSTER_NAME
+          value: "test-multicluster"
+        - name: CLUSTER_DOMAIN
+          value: "minikube.local"
+        - name: MINIO_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-endpoint
+        - name: MINIO_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-bucket
+        - name: MINIO_USE_SSL
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-use-ssl
+        - name: MINIO_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-access-key
+        - name: MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-secret-key
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: workspace
+          mountPath: /workspace
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: workspace
+        emptyDir: {}
