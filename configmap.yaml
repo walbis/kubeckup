@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-config
+  namespace: openshift-backup
+  labels:
+    app: cluster-backup
+    component: configuration
+data:
+  cluster-domain: "cluster.local"
+  cluster-name: "openshift-production"  # Change this per cluster
+  minio-endpoint: "minio.backup.example.com:9000"  # Change to your MinIO endpoint
+  minio-bucket: "cluster-backups"
+  minio-use-ssl: "true"
+  exclude-namespaces: "test-namespace,development"  # Additional namespaces to exclude
+  batch-size: "50"
+  retry-attempts: "3"
+  retry-delay: "5s"
+  log-level: "info"

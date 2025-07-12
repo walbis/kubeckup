@@ -1,0 +1,89 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-backup
+  namespace: test-backup
+  labels:
+    app: cluster-backup
+    component: backup-service
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-backup-reader
+  labels:
+    app: cluster-backup
+    component: rbac
+rules:
+- apiGroups: [""]
+  resources:
+    - pods
+    - services
+    - endpoints
+    - persistentvolumeclaims
+    - configmaps
+    - secrets
+    - serviceaccounts
+  verbs: ["get", "list"]
+- apiGroups: ["apps"]
+  resources:
+    - deployments
+    - daemonsets
+    - replicasets
+    - statefulsets
+  verbs: ["get", "list"]
+- apiGroups: ["extensions", "networking.k8s.io"]
+  resources:
+    - ingresses
+    - networkpolicies
+  verbs: ["get", "list"]
+- apiGroups: ["batch"]
+  resources:
+    - jobs
+    - cronjobs
+  verbs: ["get", "list"]
+- apiGroups: ["autoscaling"]
+  resources:
+    - horizontalpodautoscalers
+  verbs: ["get", "list"]
+- apiGroups: ["policy"]
+  resources:
+    - poddisruptionbudgets
+  verbs: ["get", "list"]
+- apiGroups: ["storage.k8s.io"]
+  resources:
+    - storageclasses
+    - volumeattachments
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources:
+    - namespaces
+  verbs: ["get", "list"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources:
+    - roles
+    - rolebindings
+    - clusterroles
+    - clusterrolebindings
+  verbs: ["get", "list"]
+- apiGroups: ["apiextensions.k8s.io"]
+  resources:
+    - customresourcedefinitions
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-backup-binding
+  labels:
+    app: cluster-backup
+    component: rbac
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-backup-reader
+subjects:
+- kind: ServiceAccount
+  name: cluster-backup
+  namespace: test-backup

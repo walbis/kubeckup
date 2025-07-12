@@ -1,0 +1,109 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backup-test-job
+  namespace: test-backup
+  labels:
+    app: cluster-backup
+    component: test-job
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app: cluster-backup
+        component: test-job
+    spec:
+      serviceAccountName: cluster-backup
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+      - name: backup
+        image: cluster-backup:test
+        imagePullPolicy: Never
+        env:
+        - name: CLUSTER_DOMAIN
+          valueFrom:
+            configMapKeyRef:
+              name: backup-config
+              key: cluster-domain
+        - name: CLUSTER_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: backup-config
+              key: cluster-name
+        - name: MINIO_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: backup-config
+              key: minio-endpoint
+        - name: MINIO_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: backup-config
+              key: minio-bucket
+        - name: MINIO_USE_SSL
+          valueFrom:
+            configMapKeyRef:
+              name: backup-config
+              key: minio-use-ssl
+        - name: EXCLUDE_NAMESPACES
+          valueFrom:
+            configMapKeyRef:
+              name: backup-config
+              key: exclude-namespaces
+        - name: BATCH_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: backup-config
+              key: batch-size
+        - name: RETRY_ATTEMPTS
+          valueFrom:
+            configMapKeyRef:
+              name: backup-config
+              key: retry-attempts
+        - name: RETRY_DELAY
+          valueFrom:
+            configMapKeyRef:
+              name: backup-config
+              key: retry-delay
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: backup-config
+              key: log-level
+        - name: MINIO_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-access-key
+        - name: MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-secret-key
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
