@@ -53,34 +53,32 @@ A comprehensive backup solution for multi-cluster Kubernetes/OpenShift environme
 
 ## 🛠 Quick Start
 
-### 1. Deploy Prerequisites
+### 1. Deploy Backup Service (All Clusters)
 
 ```bash
-# Create namespace and RBAC
-kubectl apply -f k8s/namespace-backup-system.yaml
-kubectl apply -f k8s/rbac-backup-system.yaml
+# Deploy backup service on each cluster with unique CLUSTER_NAME
+CLUSTER_NAME="production-east" kubectl apply -f k8s/backup/
 ```
 
-### 2. Configure Secrets
+### 2. Deploy Git-Sync Service (Central Cluster Only)
 
 ```bash
-# Update MinIO and Git credentials
-kubectl apply -f k8s/backup-secret.yaml
-kubectl apply -f k8s/git-sync-secret.yaml
+# Deploy git-sync service on one central cluster
+kubectl apply -f k8s/git-sync/
 ```
 
-### 3. Deploy Backup Jobs (All Clusters)
+### 3. Deploy Monitoring (Optional)
 
 ```bash
-# Deploy on each cluster with unique CLUSTER_NAME
-CLUSTER_NAME="production-east" kubectl apply -f k8s/backup-cronjob-multicluster.yaml
+# Deploy monitoring configuration
+kubectl apply -f k8s/monitoring/
 ```
 
-### 4. Deploy Git-Sync (Central Cluster Only)
+### 4. Deploy Shared Resources (If needed)
 
 ```bash
-# Deploy on one central cluster
-kubectl apply -f k8s/git-sync-cronjob-central.yaml
+# Deploy shared/common resources
+kubectl apply -f k8s/shared/
 ```
 
 ## 📊 Enhanced Structured Logging
@@ -208,7 +206,7 @@ helm install prometheus prometheus-community/kube-prometheus-stack \
 
 2. **Deploy Monitoring Configuration**:
 ```bash
-kubectl apply -f k8s/prometheus-monitoring.yaml
+kubectl apply -f k8s/monitoring/
 ```
 
 3. **Access Metrics**:
@@ -277,16 +275,24 @@ time() - cluster_backup_last_success_timestamp
 │       ├── Dockerfile    # Container image definition
 │       ├── go.mod        # Go module dependencies
 │       └── go.sum        # Dependency checksums
-└── k8s/                  # Kubernetes manifests
-    ├── namespace-backup-system.yaml      # Namespace definition
-    ├── rbac-backup-system.yaml          # RBAC configuration
-    ├── backup-secret.yaml               # Backup service secrets
-    ├── git-sync-secret.yaml             # Git-sync service secrets
-    ├── backup-cronjob-multicluster.yaml # Multi-cluster backup job
-    ├── git-sync-cronjob-central.yaml    # Central git-sync job
-    ├── monitoring.yaml                   # Basic monitoring setup
-    ├── prometheus-monitoring.yaml       # Prometheus metrics & alerts
-    └── security-policies.yaml           # Security policies
+└── k8s/                  # Kubernetes manifests (organized by service)
+    ├── backup/           # Backup service manifests
+    │   ├── backup-cronjob-multicluster.yaml
+    │   ├── backup-cronjob.yaml
+    │   ├── backup-secret.yaml
+    │   ├── namespace-backup-system.yaml
+    │   └── rbac-backup-system.yaml
+    ├── git-sync/         # Git-sync service manifests
+    │   ├── git-sync-cronjob-central.yaml
+    │   ├── git-sync-cronjob.yaml
+    │   └── git-sync-secret.yaml
+    ├── monitoring/       # Monitoring manifests
+    │   ├── monitoring.yaml
+    │   └── prometheus-monitoring.yaml
+    └── shared/           # Shared/common manifests
+        ├── namespace.yaml
+        ├── rbac.yaml
+        └── security-policies.yaml
 ```
 
 ## 🔧 Configuration Reference
