@@ -3,7 +3,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: cluster-backup
-  namespace: openshift-backup
+  namespace: backup-system
   labels:
     app: cluster-backup
     component: backup-cronjob

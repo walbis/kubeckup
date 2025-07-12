@@ -3,7 +3,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: git-sync
-  namespace: openshift-backup
+  namespace: backup-system
   labels:
     app: git-sync
     component: git-sync-cronjob
@@ -183,7 +183,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: git-sync
-  namespace: openshift-backup
+  namespace: backup-system
   labels:
     app: git-sync
     component: service-account
