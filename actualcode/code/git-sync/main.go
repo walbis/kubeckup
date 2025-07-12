@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -49,10 +50,27 @@ type GitSync struct {
 	minioClient *minio.Client
 	metrics     *GitSyncMetrics
 	ctx         context.Context
+	logger      *GitSyncLogger
+}
+
+type GitSyncLogger struct {
+	logLevel string
+}
+
+type GitSyncLogEntry struct {
+	Timestamp   string      `json:"timestamp"`
+	Level       string      `json:"level"`
+	Component   string      `json:"component"`
+	Operation   string      `json:"operation"`
+	Message     string      `json:"message"`
+	Data        interface{} `json:"data,omitempty"`
+	Error       string      `json:"error,omitempty"`
+	Duration    float64     `json:"duration_ms,omitempty"`
 }
 
 func main() {
-	log.Println("Starting Git Sync service...")
+	logger := NewGitSyncLogger()
+	logger.Info("startup", "Starting Git Sync service...", nil)
 
 	// Check if it's a health check request
 	if len(os.Args) > 1 && os.Args[1] == "--health-check" {
@@ -62,22 +80,29 @@ func main() {
 
 	config, err := loadGitSyncConfig()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		logger.Fatal("config_load", "Failed to load configuration", map[string]interface{}{"error": err.Error()})
 	}
 
-	gitSync, err := NewGitSync(config)
+	gitSync, err := NewGitSync(config, logger)
 	if err != nil {
-		log.Fatalf("Failed to initialize git sync: %v", err)
+		logger.Fatal("git_sync_init", "Failed to initialize git sync", map[string]interface{}{"error": err.Error()})
 	}
+
+	logger.Info("config_loaded", "Git sync configuration loaded successfully", map[string]interface{}{
+		"git_repository": config.GitRepository,
+		"git_branch": config.GitBranch,
+		"minio_bucket": config.MinIOBucket,
+		"work_dir": config.WorkDir,
+	})
 
 	// Start metrics server in a goroutine
 	go startGitSyncMetricsServer()
 
 	if err := gitSync.Run(); err != nil {
-		log.Fatalf("Git sync failed: %v", err)
+		logger.Fatal("git_sync_run", "Git sync failed", map[string]interface{}{"error": err.Error()})
 	}
 
-	log.Println("Git sync completed successfully")
+	logger.Info("git_sync_complete", "Git sync completed successfully", nil)
 }
 
 func startGitSyncMetricsServer() {
@@ -128,7 +153,73 @@ func getEnvOrDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-func NewGitSync(config *GitSyncConfig) (*GitSync, error) {
+func NewGitSyncLogger() *GitSyncLogger {
+	return &GitSyncLogger{
+		logLevel: getEnvOrDefault("LOG_LEVEL", "info"),
+	}
+}
+
+func (gsl *GitSyncLogger) log(level, operation, message string, data map[string]interface{}, err error) {
+	entry := GitSyncLogEntry{
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Level:     level,
+		Component: "git-sync",
+		Operation: operation,
+		Message:   message,
+		Data:      data,
+	}
+	
+	if err != nil {
+		entry.Error = err.Error()
+	}
+	
+	// Add duration from data if available
+	if data != nil {
+		if dur, ok := data["duration_ms"].(float64); ok {
+			entry.Duration = dur
+		}
+	}
+	
+	logJSON, _ := json.Marshal(entry)
+	fmt.Println(string(logJSON))
+	
+	// Also log to standard logger for backward compatibility
+	if level == "error" || level == "fatal" {
+		log.Printf("[%s] %s: %s", level, operation, message)
+		if err != nil {
+			log.Printf("Error details: %v", err)
+		}
+	}
+}
+
+func (gsl *GitSyncLogger) Debug(operation, message string, data map[string]interface{}) {
+	if gsl.logLevel == "debug" {
+		gsl.log("debug", operation, message, data, nil)
+	}
+}
+
+func (gsl *GitSyncLogger) Info(operation, message string, data map[string]interface{}) {
+	gsl.log("info", operation, message, data, nil)
+}
+
+func (gsl *GitSyncLogger) Warn(operation, message string, data map[string]interface{}) {
+	gsl.log("warn", operation, message, data, nil)
+}
+
+func (gsl *GitSyncLogger) Error(operation, message string, data map[string]interface{}) {
+	gsl.log("error", operation, message, data, nil)
+}
+
+func (gsl *GitSyncLogger) ErrorWithErr(operation, message string, data map[string]interface{}, err error) {
+	gsl.log("error", operation, message, data, err)
+}
+
+func (gsl *GitSyncLogger) Fatal(operation, message string, data map[string]interface{}) {
+	gsl.log("fatal", operation, message, data, nil)
+	os.Exit(1)
+}
+
+func NewGitSync(config *GitSyncConfig, logger *GitSyncLogger) (*GitSync, error) {
 	minioClient, err := minio.New(config.MinIOEndpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(config.MinIOAccessKey, config.MinIOSecretKey, ""),
 		Secure: config.MinIOUseSSL,
@@ -165,6 +256,7 @@ func NewGitSync(config *GitSyncConfig) (*GitSync, error) {
 		minioClient: minioClient,
 		metrics:     metrics,
 		ctx:         context.Background(),
+		logger:      logger,
 	}, nil
 }
 

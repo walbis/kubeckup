@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -67,6 +68,26 @@ type ClusterBackup struct {
 	discoveryClient discovery.DiscoveryInterface
 	metrics      *BackupMetrics
 	ctx          context.Context
+	logger       *StructuredLogger
+}
+
+type StructuredLogger struct {
+	clusterName string
+	logLevel    string
+}
+
+type LogEntry struct {
+	Timestamp   string      `json:"timestamp"`
+	Level       string      `json:"level"`
+	Component   string      `json:"component"`
+	Cluster     string      `json:"cluster"`
+	Namespace   string      `json:"namespace,omitempty"`
+	Resource    string      `json:"resource,omitempty"`
+	Operation   string      `json:"operation"`
+	Message     string      `json:"message"`
+	Data        interface{} `json:"data,omitempty"`
+	Error       string      `json:"error,omitempty"`
+	Duration    float64     `json:"duration_ms,omitempty"`
 }
 
 type BackupMetrics struct {
@@ -95,7 +116,8 @@ var (
 )
 
 func main() {
-	log.Println("Starting Enhanced OpenShift Cluster Backup...")
+	logger := NewStructuredLogger("backup", getSecretValue("CLUSTER_NAME", "default"))
+	logger.Info("startup", "Starting Enhanced OpenShift Cluster Backup...", nil)
 
 	// Check if it's a health check request
 	if len(os.Args) > 1 && os.Args[1] == "--health-check" {
@@ -105,27 +127,34 @@ func main() {
 
 	config, err := loadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		logger.Fatal("config_load", "Failed to load configuration", map[string]interface{}{"error": err.Error()})
 	}
 
 	backupConfig, err := loadBackupConfig()
 	if err != nil {
-		log.Fatalf("Failed to load backup configuration: %v", err)
+		logger.Fatal("backup_config_load", "Failed to load backup configuration", map[string]interface{}{"error": err.Error()})
 	}
 
-	backup, err := NewClusterBackup(config, backupConfig)
+	backup, err := NewClusterBackup(config, backupConfig, logger)
 	if err != nil {
-		log.Fatalf("Failed to create backup client: %v", err)
+		logger.Fatal("backup_client_init", "Failed to create backup client", map[string]interface{}{"error": err.Error()})
 	}
+
+	logger.Info("config_loaded", "Configuration loaded successfully", map[string]interface{}{
+		"cluster_name": config.ClusterName,
+		"filtering_mode": backupConfig.FilteringMode,
+		"openshift_mode": backupConfig.OpenShiftMode,
+		"minio_bucket": config.MinIOBucket,
+	})
 
 	// Start metrics server in a goroutine
 	go startMetricsServer()
 
 	if err := backup.Run(); err != nil {
-		log.Fatalf("Backup failed: %v", err)
+		logger.Fatal("backup_run", "Backup failed", map[string]interface{}{"error": err.Error()})
 	}
 
-	log.Println("Backup completed successfully")
+	logger.Info("backup_complete", "Backup completed successfully", nil)
 }
 
 func loadConfig() (*Config, error) {
@@ -296,7 +325,7 @@ func parseCommaSeparated(input string) []string {
 	return result
 }
 
-func NewClusterBackup(config *Config, backupConfig *BackupConfig) (*ClusterBackup, error) {
+func NewClusterBackup(config *Config, backupConfig *BackupConfig, logger *StructuredLogger) (*ClusterBackup, error) {
 	kubeConfig, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes config: %v", err)
@@ -357,83 +386,169 @@ func NewClusterBackup(config *Config, backupConfig *BackupConfig) (*ClusterBacku
 		discoveryClient: discoveryClient,
 		metrics:         metrics,
 		ctx:             context.Background(),
+		logger:          logger,
 	}, nil
 }
 
 func (cb *ClusterBackup) Run() error {
 	startTime := time.Now()
 	defer func() {
-		cb.metrics.BackupDuration.Observe(time.Since(startTime).Seconds())
+		duration := time.Since(startTime)
+		cb.metrics.BackupDuration.Observe(duration.Seconds())
+		cb.logger.Info("backup_duration", "Backup operation completed", map[string]interface{}{
+			"duration_ms": float64(duration.Nanoseconds()) / 1e6,
+			"duration_seconds": duration.Seconds(),
+		})
 	}()
 
-	log.Printf("Starting backup with config: cluster=%s.%s, OpenShift=%s", 
-		cb.config.ClusterName, cb.config.ClusterDomain, cb.backupConfig.OpenShiftMode)
+	cb.logger.Info("backup_start", "Starting backup operation", map[string]interface{}{
+		"cluster": cb.config.ClusterName + "." + cb.config.ClusterDomain,
+		"openshift_mode": cb.backupConfig.OpenShiftMode,
+		"filtering_mode": cb.backupConfig.FilteringMode,
+	})
 
 	// Auto-detect OpenShift if needed
 	if cb.backupConfig.OpenShiftMode == "auto-detect" {
-		cb.backupConfig.OpenShiftMode = cb.detectOpenShift()
+		detectedMode := cb.detectOpenShift()
+		cb.backupConfig.OpenShiftMode = detectedMode
+		cb.logger.Info("openshift_detection", "OpenShift auto-detection completed", map[string]interface{}{
+			"detected_mode": detectedMode,
+		})
 	}
+
+	cb.logger.Info("minio_check", "Checking MinIO bucket existence", map[string]interface{}{
+		"bucket": cb.config.MinIOBucket,
+		"endpoint": cb.config.MinIOEndpoint,
+	})
 
 	exists, err := cb.minioClient.BucketExists(cb.ctx, cb.config.MinIOBucket)
 	if err != nil {
 		cb.metrics.BackupErrors.Inc()
+		cb.logger.Error("minio_bucket_check", "Failed to check bucket existence", map[string]interface{}{
+			"bucket": cb.config.MinIOBucket,
+			"error": err.Error(),
+		})
 		return fmt.Errorf("failed to check bucket existence: %v", err)
 	}
 	if !exists {
 		cb.metrics.BackupErrors.Inc()
+		cb.logger.Error("minio_bucket_missing", "MinIO bucket does not exist", map[string]interface{}{
+			"bucket": cb.config.MinIOBucket,
+		})
 		return fmt.Errorf("bucket %s does not exist", cb.config.MinIOBucket)
 	}
 
+	cb.logger.Info("minio_ready", "MinIO bucket verified successfully", map[string]interface{}{
+		"bucket": cb.config.MinIOBucket,
+	})
+
 	// Get all available API resources
+	cb.logger.Info("api_discovery_start", "Starting API resource discovery", nil)
 	apiResources, err := cb.getAPIResources()
 	if err != nil {
 		cb.metrics.BackupErrors.Inc()
+		cb.logger.Error("api_discovery_failed", "Failed to get API resources", map[string]interface{}{
+			"error": err.Error(),
+		})
 		return fmt.Errorf("failed to get API resources: %v", err)
 	}
 
-	log.Printf("Found %d API resource types", len(apiResources))
+	cb.logger.Info("api_discovery_complete", "API resource discovery completed", map[string]interface{}{
+		"resource_types_found": len(apiResources),
+	})
 
 	// Get namespaces to backup
+	cb.logger.Info("namespace_discovery_start", "Starting namespace discovery", nil)
 	namespaces, err := cb.getNamespacesToBackup()
 	if err != nil {
 		cb.metrics.BackupErrors.Inc()
+		cb.logger.Error("namespace_discovery_failed", "Failed to get namespaces", map[string]interface{}{
+			"error": err.Error(),
+		})
 		return fmt.Errorf("failed to get namespaces: %v", err)
 	}
 
-	log.Printf("Backing up %d namespaces", len(namespaces))
+	cb.logger.Info("namespace_discovery_complete", "Namespace discovery completed", map[string]interface{}{
+		"namespaces_to_backup": len(namespaces),
+		"namespace_list": namespaces,
+	})
 	cb.metrics.NamespacesBackedUp.Set(float64(len(namespaces)))
 
 	totalResources := 0
+	namespaceResults := make([]map[string]interface{}, 0)
+	
 	for _, ns := range namespaces {
+		nsStartTime := time.Now()
 		count, err := cb.backupNamespace(ns, apiResources)
+		nsDuration := time.Since(nsStartTime)
+		
+		nsResult := map[string]interface{}{
+			"namespace": ns,
+			"duration_ms": float64(nsDuration.Nanoseconds()) / 1e6,
+			"resources_backed_up": count,
+		}
+		
 		if err != nil {
-			log.Printf("Error backing up namespace %s: %v", ns, err)
+			cb.logger.Error("namespace_backup_failed", "Error backing up namespace", map[string]interface{}{
+				"namespace": ns,
+				"error": err.Error(),
+				"duration_ms": float64(nsDuration.Nanoseconds()) / 1e6,
+			})
 			cb.metrics.BackupErrors.Inc()
+			nsResult["error"] = err.Error()
 		} else {
+			cb.logger.Info("namespace_backup_complete", "Namespace backup completed", map[string]interface{}{
+				"namespace": ns,
+				"resources_backed_up": count,
+				"duration_ms": float64(nsDuration.Nanoseconds()) / 1e6,
+			})
 			totalResources += count
 		}
+		
+		namespaceResults = append(namespaceResults, nsResult)
 	}
 
-	log.Printf("Backup completed: %d resources from %d namespaces", totalResources, len(namespaces))
+	cb.logger.Info("backup_summary", "Backup operation summary", map[string]interface{}{
+		"total_resources": totalResources,
+		"total_namespaces": len(namespaces),
+		"namespace_details": namespaceResults,
+	})
 	cb.metrics.LastBackupTime.SetToCurrentTime()
 	return nil
 }
 
 func (cb *ClusterBackup) detectOpenShift() string {
 	// Try to detect OpenShift by looking for OpenShift-specific APIs
+	cb.logger.Debug("openshift_api_check", "Checking for OpenShift route API", map[string]interface{}{
+		"api_group": "route.openshift.io/v1",
+	})
+	
 	_, err := cb.discoveryClient.ServerResourcesForGroupVersion("route.openshift.io/v1")
 	if err == nil {
-		log.Println("OpenShift detected (route.openshift.io API found)")
+		cb.logger.Info("openshift_detected", "OpenShift detected via route API", map[string]interface{}{
+			"detection_method": "route.openshift.io/v1",
+			"mode": "enabled",
+		})
 		return "enabled"
 	}
+	
+	cb.logger.Debug("openshift_api_check", "Checking for OpenShift build API", map[string]interface{}{
+		"api_group": "build.openshift.io/v1",
+	})
 	
 	_, err = cb.discoveryClient.ServerResourcesForGroupVersion("build.openshift.io/v1")
 	if err == nil {
-		log.Println("OpenShift detected (build.openshift.io API found)")
+		cb.logger.Info("openshift_detected", "OpenShift detected via build API", map[string]interface{}{
+			"detection_method": "build.openshift.io/v1",
+			"mode": "enabled",
+		})
 		return "enabled"
 	}
 	
-	log.Println("OpenShift not detected, using standard Kubernetes mode")
+	cb.logger.Info("kubernetes_detected", "OpenShift not detected, using standard Kubernetes mode", map[string]interface{}{
+		"mode": "disabled",
+		"route_api_error": err.Error(),
+	})
 	return "disabled"
 }
 
@@ -597,8 +712,12 @@ func (cb *ClusterBackup) shouldExcludeNamespace(namespace string) bool {
 }
 
 func (cb *ClusterBackup) backupNamespace(namespace string, apiResources []metav1.APIResource) (int, error) {
-	log.Printf("Backing up namespace: %s", namespace)
+	cb.logger.Info("namespace_backup_start", "Starting namespace backup", map[string]interface{}{
+		"namespace": namespace,
+		"api_resources_available": len(apiResources),
+	})
 	resourceCount := 0
+	resourceErrors := 0
 
 	for _, resource := range apiResources {
 		gvr := schema.GroupVersionResource{
@@ -622,14 +741,42 @@ func (cb *ClusterBackup) backupNamespace(namespace string, apiResources []metav1
 			gvr.Version = resource.Version
 		}
 
+		resourceStartTime := time.Now()
 		count, err := cb.backupResource(namespace, gvr, resource)
+		resourceDuration := time.Since(resourceStartTime)
+		
 		if err != nil {
-			log.Printf("Error backing up resource %s in namespace %s: %v", resource.Name, namespace, err)
+			cb.logger.Error("resource_backup_failed", "Error backing up resource type", map[string]interface{}{
+				"namespace": namespace,
+				"resource_type": resource.Name,
+				"group": gvr.Group,
+				"version": gvr.Version,
+				"error": err.Error(),
+				"duration_ms": float64(resourceDuration.Nanoseconds()) / 1e6,
+			})
+			resourceErrors++
 			continue
 		}
+		
+		if count > 0 {
+			cb.logger.Debug("resource_backup_success", "Resource backup completed", map[string]interface{}{
+				"namespace": namespace,
+				"resource_type": resource.Name,
+				"count": count,
+				"duration_ms": float64(resourceDuration.Nanoseconds()) / 1e6,
+			})
+		}
+		
 		resourceCount += count
 	}
 
+	cb.logger.Info("namespace_backup_summary", "Namespace backup completed", map[string]interface{}{
+		"namespace": namespace,
+		"total_resources": resourceCount,
+		"resource_errors": resourceErrors,
+		"api_types_processed": len(apiResources),
+	})
+	
 	return resourceCount, nil
 }
 
@@ -639,6 +786,15 @@ func (cb *ClusterBackup) backupResource(namespace string, gvr schema.GroupVersio
 	if cb.backupConfig.LabelSelector != "" {
 		listOptions.LabelSelector = cb.backupConfig.LabelSelector
 	}
+	
+	cb.logger.Debug("resource_list_start", "Starting resource listing", map[string]interface{}{
+		"namespace": namespace,
+		"resource_type": resource.Name,
+		"group": gvr.Group,
+		"version": gvr.Version,
+		"namespaced": resource.Namespaced,
+		"label_selector": cb.backupConfig.LabelSelector,
+	})
 
 	var resources *unstructured.UnstructuredList
 	var err error
@@ -650,12 +806,33 @@ func (cb *ClusterBackup) backupResource(namespace string, gvr schema.GroupVersio
 	}
 
 	if err != nil {
+		cb.logger.Error("resource_list_failed", "Failed to list resources", map[string]interface{}{
+			"namespace": namespace,
+			"resource_type": resource.Name,
+			"error": err.Error(),
+		})
 		return 0, fmt.Errorf("failed to list %s: %v", resource.Name, err)
 	}
 
 	count := 0
+	skipped := 0
+	invalid := 0
+	
+	cb.logger.Debug("resource_processing_start", "Processing individual resources", map[string]interface{}{
+		"namespace": namespace,
+		"resource_type": resource.Name,
+		"total_items": len(resources.Items),
+	})
+	
 	for _, item := range resources.Items {
 		if cb.shouldSkipResource(&item) {
+			cb.logger.Debug("resource_skipped", "Resource skipped due to filters", map[string]interface{}{
+				"namespace": namespace,
+				"resource_type": resource.Name,
+				"resource_name": item.GetName(),
+				"reason": "annotation_or_owner_filter",
+			})
+			skipped++
 			continue
 		}
 
@@ -664,24 +841,54 @@ func (cb *ClusterBackup) backupResource(namespace string, gvr schema.GroupVersio
 		if cb.backupConfig.ValidateYAML {
 			if err := cb.validateResource(cleaned); err != nil {
 				if cb.backupConfig.SkipInvalidResources {
-					log.Printf("Skipping invalid resource %s/%s: %v", namespace, item.GetName(), err)
+					cb.logger.Warn("resource_invalid_skipped", "Skipping invalid resource", map[string]interface{}{
+						"namespace": namespace,
+						"resource_type": resource.Name,
+						"resource_name": item.GetName(),
+						"validation_error": err.Error(),
+					})
+					invalid++
 					continue
 				}
+				cb.logger.Error("resource_invalid_fatal", "Invalid resource causing backup failure", map[string]interface{}{
+					"namespace": namespace,
+					"resource_type": resource.Name,
+					"resource_name": item.GetName(),
+					"validation_error": err.Error(),
+				})
 				return count, fmt.Errorf("invalid resource %s/%s: %v", namespace, item.GetName(), err)
 			}
 		}
 
 		if err := cb.uploadResource(namespace, gvr.Resource, item.GetName(), cleaned); err != nil {
+			cb.logger.Error("resource_upload_failed", "Failed to upload resource to MinIO", map[string]interface{}{
+				"namespace": namespace,
+				"resource_type": resource.Name,
+				"resource_name": item.GetName(),
+				"error": err.Error(),
+			})
 			return count, fmt.Errorf("failed to upload %s/%s: %v", namespace, item.GetName(), err)
 		}
 
 		count++
 		cb.metrics.ResourcesBackedUp.Inc()
+		
+		cb.logger.Debug("resource_uploaded", "Resource successfully uploaded", map[string]interface{}{
+			"namespace": namespace,
+			"resource_type": resource.Name,
+			"resource_name": item.GetName(),
+			"path": fmt.Sprintf("clusterbackup/%s/%s/%s/%s.yaml", cb.config.ClusterName, namespace, gvr.Resource, item.GetName()),
+		})
 	}
 
-	if count > 0 {
-		log.Printf("Backed up %d %s resources from namespace %s", count, resource.Name, namespace)
-	}
+	cb.logger.Info("resource_type_summary", "Resource type backup completed", map[string]interface{}{
+		"namespace": namespace,
+		"resource_type": resource.Name,
+		"backed_up": count,
+		"skipped": skipped,
+		"invalid": invalid,
+		"total_processed": len(resources.Items),
+	})
 
 	return count, nil
 }
@@ -795,6 +1002,80 @@ func getSecretValue(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func NewStructuredLogger(component, clusterName string) *StructuredLogger {
+	return &StructuredLogger{
+		clusterName: clusterName,
+		logLevel:    getSecretValue("LOG_LEVEL", "info"),
+	}
+}
+
+func (sl *StructuredLogger) log(level, operation, message string, data map[string]interface{}, err error) {
+	entry := LogEntry{
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Level:     level,
+		Component: "backup",
+		Cluster:   sl.clusterName,
+		Operation: operation,
+		Message:   message,
+		Data:      data,
+	}
+	
+	if err != nil {
+		entry.Error = err.Error()
+	}
+	
+	// Add namespace and resource from data if available
+	if data != nil {
+		if ns, ok := data["namespace"].(string); ok {
+			entry.Namespace = ns
+		}
+		if res, ok := data["resource"].(string); ok {
+			entry.Resource = res
+		}
+		if dur, ok := data["duration_ms"].(float64); ok {
+			entry.Duration = dur
+		}
+	}
+	
+	logJSON, _ := json.Marshal(entry)
+	fmt.Println(string(logJSON))
+	
+	// Also log to standard logger for backward compatibility
+	if level == "error" || level == "fatal" {
+		log.Printf("[%s] %s: %s", level, operation, message)
+		if err != nil {
+			log.Printf("Error details: %v", err)
+		}
+	}
+}
+
+func (sl *StructuredLogger) Debug(operation, message string, data map[string]interface{}) {
+	if sl.logLevel == "debug" {
+		sl.log("debug", operation, message, data, nil)
+	}
+}
+
+func (sl *StructuredLogger) Info(operation, message string, data map[string]interface{}) {
+	sl.log("info", operation, message, data, nil)
+}
+
+func (sl *StructuredLogger) Warn(operation, message string, data map[string]interface{}) {
+	sl.log("warn", operation, message, data, nil)
+}
+
+func (sl *StructuredLogger) Error(operation, message string, data map[string]interface{}) {
+	sl.log("error", operation, message, data, nil)
+}
+
+func (sl *StructuredLogger) ErrorWithErr(operation, message string, data map[string]interface{}, err error) {
+	sl.log("error", operation, message, data, err)
+}
+
+func (sl *StructuredLogger) Fatal(operation, message string, data map[string]interface{}) {
+	sl.log("fatal", operation, message, data, nil)
+	os.Exit(1)
 }
 
 func startMetricsServer() {
