@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Pod
+metadata:
+    generateName: argo-server-64f8c6b4d-
+    labels:
+        app: argo-server
+        pod-template-hash: 64f8c6b4d
+    name: argo-server-64f8c6b4d-wd86z
+    namespace: argo
+    ownerReferences:
+        - apiVersion: apps/v1
+          blockOwnerDeletion: true
+          controller: true
+          kind: ReplicaSet
+          name: argo-server-64f8c6b4d
+          uid: 42444840-3e61-493d-953d-b1ab92a8df45
+spec:
+    containers:
+        - args:
+            - server
+          image: quay.io/argoproj/argocli:v3.5.5
+          imagePullPolicy: IfNotPresent
+          name: argo-server
+          ports:
+            - containerPort: 2746
+              name: web
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+                path: /
+                port: 2746
+                scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+                drop:
+                    - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /tmp
+              name: tmp
+            - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              name: kube-api-access-5mhwp
+              readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    nodeSelector:
+        kubernetes.io/os: linux
+    preemptionPolicy: PreemptLowerPriority
+    priority: 0
+    restartPolicy: Always
+    schedulerName: default-scheduler
+    securityContext:
+        runAsNonRoot: true
+    serviceAccount: argo-server
+    serviceAccountName: argo-server
+    terminationGracePeriodSeconds: 30
+    tolerations:
+        - effect: NoExecute
+          key: node.kubernetes.io/not-ready
+          operator: Exists
+          tolerationSeconds: 300
+        - effect: NoExecute
+          key: node.kubernetes.io/unreachable
+          operator: Exists
+          tolerationSeconds: 300
+    volumes:
+        - emptyDir: {}
+          name: tmp
+        - name: kube-api-access-5mhwp
+          projected:
+            defaultMode: 420
+            sources:
+                - serviceAccountToken:
+                    expirationSeconds: 3607
+                    path: token
+                - configMap:
+                    items:
+                        - key: ca.crt
+                          path: ca.crt
+                    name: kube-root-ca.crt
+                - downwardAPI:
+                    items:
+                        - fieldRef:
+                            apiVersion: v1
+                            fieldPath: metadata.namespace
+                          path: namespace

@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Pod
+metadata:
+    annotations: {}
+    name: debug-git-sync-env
+    namespace: test-backup
+spec:
+    containers:
+        - args:
+            - -c
+            - echo 'Environment:'; env | grep -E '(WORK|MINIO|GIT)'; echo 'PWD:'; pwd; echo 'Workspace:'; ls -la /workspace; echo 'Testing path logic:'; echo $WORK_DIR; echo 'filepath.Join test would create:'; sleep 300
+          command:
+            - /bin/sh
+          env:
+            - name: WORK_DIR
+              valueFrom:
+                secretKeyRef:
+                    key: work-dir
+                    name: git-sync-secrets
+            - name: MINIO_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                    key: minio-endpoint
+                    name: git-sync-secrets
+          image: git-sync:alpine-production
+          imagePullPolicy: IfNotPresent
+          name: debug
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /workspace
+              name: workspace
+            - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              name: kube-api-access-l7xrg
+              readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    preemptionPolicy: PreemptLowerPriority
+    priority: 0
+    restartPolicy: Never
+    schedulerName: default-scheduler
+    securityContext:
+        fsGroup: 1001
+        runAsNonRoot: true
+        runAsUser: 1001
+    serviceAccount: cluster-backup
+    serviceAccountName: cluster-backup
+    terminationGracePeriodSeconds: 30
+    tolerations:
+        - effect: NoExecute
+          key: node.kubernetes.io/not-ready
+          operator: Exists
+          tolerationSeconds: 300
+        - effect: NoExecute
+          key: node.kubernetes.io/unreachable
+          operator: Exists
+          tolerationSeconds: 300
+    volumes:
+        - emptyDir: {}
+          name: workspace
+        - name: kube-api-access-l7xrg
+          projected:
+            defaultMode: 420
+            sources:
+                - serviceAccountToken:
+                    expirationSeconds: 3607
+                    path: token
+                - configMap:
+                    items:
+                        - key: ca.crt
+                          path: ca.crt
+                    name: kube-root-ca.crt
+                - downwardAPI:
+                    items:
+                        - fieldRef:
+                            apiVersion: v1
+                            fieldPath: metadata.namespace
+                          path: namespace

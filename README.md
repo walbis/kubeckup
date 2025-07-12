@@ -1,20 +1,25 @@
-# OpenShift Cluster Backup System
+# KubeBackup - Production-Ready OpenShift/Kubernetes Cluster Backup System
 
-Production-grade backup solution for OpenShift clusters that automatically exports Kubernetes resources to MinIO and synchronizes them to Git repositories.
+A comprehensive, production-grade backup solution for OpenShift and Kubernetes clusters with advanced filtering capabilities, MinIO object storage integration, and automated Git synchronization.
 
-## Overview
+## Features
 
-This system consists of two main components:
-
-1. **Cluster Backup CronJob**: Runs on each OpenShift cluster to export resources
-2. **Git Synchronization CronJob**: Runs centrally to consolidate backups and push to Git
+- **Advanced Resource Filtering**: Supports whitelist, blacklist, and hybrid filtering modes
+- **OpenShift Compatibility**: Auto-detects OpenShift environments and backs up OpenShift-specific resources
+- **CRD Support**: Dynamic Custom Resource Definition discovery and backup
+- **ConfigMap-Driven Configuration**: Flexible filtering rules via Kubernetes ConfigMaps
+- **MinIO Integration**: Secure object storage with structured path organization
+- **Git Synchronization**: Automated backup synchronization to Git repositories
+- **Production Security**: RBAC, security policies, and least privilege principles
+- **Monitoring & Metrics**: Prometheus metrics and comprehensive logging
+- **Multi-Cluster Support**: Designed for enterprise multi-cluster environments
 
 ## Architecture
 
 ```
 [OpenShift Cluster 1] ---> [MinIO] <--- [Git Sync Job] ---> [Git Repository]
 [OpenShift Cluster 2] ---> [MinIO] <--- [Git Sync Job] ---> [Git Repository]
-[OpenShift Cluster N] ---> [MinIO] <--- [Git Sync Job] ---> [Git Repository]
+[Kubernetes Cluster] ---> [MinIO] <--- [Git Sync Job] ---> [Git Repository]
 ```
 
 ## Security Features

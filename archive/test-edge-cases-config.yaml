@@ -1,0 +1,48 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-config
+  namespace: test-backup
+  labels:
+    app: cluster-backup
+    component: config
+data:
+  # Basic Configuration
+  batch-size: "50"
+  retry-attempts: "3"
+  retry-delay: "5s"
+  
+  # Resource Filtering Configuration - EDGE CASE: Empty lists
+  filtering-mode: "whitelist"
+  
+  # Empty include list (should result in no resources)
+  include-resources: |
+    
+  # Non-empty exclude list (should be ignored in whitelist mode)
+  exclude-resources: |
+    pods,services
+  
+  # Include specific namespaces
+  include-namespaces: |
+    
+  # Exclude specific namespaces
+  exclude-namespaces: |
+    kube-system,kube-public,kube-node-lease,openshift-system,
+    openshift-cluster-version,openshift-machine-api,openshift-kube-apiserver,
+    openshift-kube-controller-manager,openshift-kube-scheduler,openshift-etcd,
+    openshift-apiserver,openshift-controller-manager,openshift-service-ca,
+    openshift-network-operator,openshift-sdn,openshift-dns,openshift-ingress,
+    openshift-authentication,openshift-oauth-apiserver,openshift-image-registry,
+    openshift-cluster-storage-operator,openshift-cluster-csi-drivers,
+    openshift-monitoring,openshift-operator-lifecycle-manager,
+    openshift-marketplace,openshift-console,openshift-console-operator
+
+  # CRDs to include (empty for this test)
+  include-crds: |
+    
+  # Advanced settings
+  openshift-mode: "auto-detect"
+  include-openshift-resources: "true"
+  validate-yaml: "true"
+  skip-invalid-resources: "true"

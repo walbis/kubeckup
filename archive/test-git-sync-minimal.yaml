@@ -1,0 +1,43 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: git-sync-minimal-test
+  namespace: test-backup
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app: git-sync
+        component: minimal-test
+    spec:
+      serviceAccountName: cluster-backup
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+      - name: git-sync-test
+        image: alpine:latest
+        command: ["/bin/sh"]
+        args: ["-c", "echo 'Testing git-sync environment' && echo 'WORK_DIR='$WORK_DIR && echo 'MINIO_ENDPOINT='$MINIO_ENDPOINT && ls -la /workspace && mkdir -p /workspace/test-dir && ls -la /workspace && echo 'Test completed successfully'"]
+        env:
+        - name: WORK_DIR
+          valueFrom:
+            secretKeyRef:
+              name: git-sync-secrets
+              key: work-dir
+        - name: MINIO_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: git-sync-secrets
+              key: minio-endpoint
+        volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+      volumes:
+      - name: workspace
+        emptyDir: {}

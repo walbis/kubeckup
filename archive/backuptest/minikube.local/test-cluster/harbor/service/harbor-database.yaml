@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+    annotations:
+        meta.helm.sh/release-name: harbor
+        meta.helm.sh/release-namespace: harbor
+    labels:
+        app: harbor
+        app.kubernetes.io/instance: harbor
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: harbor
+        app.kubernetes.io/part-of: harbor
+        app.kubernetes.io/version: 2.13.1
+        chart: harbor
+        heritage: Helm
+        release: harbor
+    name: harbor-database
+    namespace: harbor
+spec:
+    clusterIP: 10.106.223.16
+    clusterIPs:
+        - 10.106.223.16
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+        - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+        - port: 5432
+          protocol: TCP
+          targetPort: 5432
+    selector:
+        app: harbor
+        component: database
+        release: harbor
+    sessionAffinity: None
+    type: ClusterIP

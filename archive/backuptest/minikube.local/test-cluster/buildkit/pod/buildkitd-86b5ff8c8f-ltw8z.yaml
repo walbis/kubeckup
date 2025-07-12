@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: Pod
+metadata:
+    generateName: buildkitd-86b5ff8c8f-
+    labels:
+        app: buildkitd
+        pod-template-hash: 86b5ff8c8f
+    name: buildkitd-86b5ff8c8f-ltw8z
+    namespace: buildkit
+    ownerReferences:
+        - apiVersion: apps/v1
+          blockOwnerDeletion: true
+          controller: true
+          kind: ReplicaSet
+          name: buildkitd-86b5ff8c8f
+          uid: a2a36062-60b9-4203-a47a-705e6f652559
+spec:
+    containers:
+        - args:
+            - --addr=tcp://0.0.0.0:1234
+          command:
+            - buildkitd
+          image: moby/buildkit:latest
+          imagePullPolicy: Always
+          name: buildkitd
+          ports:
+            - containerPort: 1234
+              name: tcp
+              protocol: TCP
+          resources:
+            limits:
+                cpu: "2"
+                memory: 4Gi
+            requests:
+                cpu: 200m
+                memory: 512Mi
+          securityContext:
+            privileged: true
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /run/buildkit
+              name: buildkit-sock
+            - mountPath: /var/lib/buildkit
+              name: buildkit-cache
+            - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              name: kube-api-access-6z9sc
+              readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    preemptionPolicy: PreemptLowerPriority
+    priority: 0
+    restartPolicy: Always
+    schedulerName: default-scheduler
+    securityContext: {}
+    serviceAccount: default
+    serviceAccountName: default
+    terminationGracePeriodSeconds: 30
+    tolerations:
+        - effect: NoExecute
+          key: node.kubernetes.io/not-ready
+          operator: Exists
+          tolerationSeconds: 300
+        - effect: NoExecute
+          key: node.kubernetes.io/unreachable
+          operator: Exists
+          tolerationSeconds: 300
+    volumes:
+        - emptyDir: {}
+          name: buildkit-sock
+        - emptyDir: {}
+          name: buildkit-cache
+        - name: kube-api-access-6z9sc
+          projected:
+            defaultMode: 420
+            sources:
+                - serviceAccountToken:
+                    expirationSeconds: 3607
+                    path: token
+                - configMap:
+                    items:
+                        - key: ca.crt
+                          path: ca.crt
+                    name: kube-root-ca.crt
+                - downwardAPI:
+                    items:
+                        - fieldRef:
+                            apiVersion: v1
+                            fieldPath: metadata.namespace
+                          path: namespace

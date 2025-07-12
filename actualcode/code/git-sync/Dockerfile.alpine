@@ -1,0 +1,77 @@
+# Multi-stage build for Git Sync Service
+# Alpine-based container for testing (UBI9 for production)
+
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /workspace
+
+# Install git for go mod download
+RUN apk add --no-cache git ca-certificates
+
+# Copy Go modules and download dependencies
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+
+# Copy source code and build statically linked binary
+COPY git-sync.go ./
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags='-w -s -extldflags "-static"' \
+    -a -installsuffix cgo \
+    -o git-sync git-sync.go
+
+# Final runtime image based on Alpine
+FROM alpine:latest
+
+# Install security updates and required packages
+RUN apk --no-cache add \
+        ca-certificates \
+        git \
+        openssh-client \
+        tar \
+        gzip && \
+    apk --no-cache upgrade
+
+# Create non-root user
+RUN adduser -D -u 1001 -g root -s /sbin/nologin git-sync-user
+
+# Copy binary from builder stage
+COPY --from=builder /workspace/git-sync /usr/local/bin/git-sync
+
+# Set proper permissions
+RUN chmod +x /usr/local/bin/git-sync && \
+    chown 1001:0 /usr/local/bin/git-sync
+
+# Create necessary directories with proper permissions
+RUN mkdir -p /tmp /workspace /home/git-sync-user/.ssh && \
+    chmod 1777 /tmp && \
+    chown -R 1001:0 /workspace /home/git-sync-user && \
+    chmod 700 /home/git-sync-user/.ssh
+
+# Security labels
+LABEL name="openshift-cluster-git-sync" \
+      vendor="OpenShift" \
+      version="1.0.0" \
+      summary="OpenShift Cluster Git Sync Service" \
+      description="Production-ready git synchronization service for cluster backups" \
+      io.k8s.description="Sync cluster backups from MinIO to Git repositories" \
+      io.k8s.display-name="OpenShift Cluster Git Sync" \
+      io.openshift.tags="git,sync,backup,openshift,kubernetes"
+
+# Switch to non-root user
+USER 1001
+
+# Set HOME environment variable
+ENV HOME=/home/git-sync-user
+
+# Expose metrics port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD ["/usr/local/bin/git-sync", "--health-check"]
+
+# Set working directory
+WORKDIR /workspace
+
+# Default command
+CMD ["/usr/local/bin/git-sync"]

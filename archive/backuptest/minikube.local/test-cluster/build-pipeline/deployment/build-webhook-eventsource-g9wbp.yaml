@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    annotations:
+        resource-spec-hash: "794198531"
+    generateName: build-webhook-eventsource-
+    labels:
+        controller: eventsource-controller
+        eventsource-name: build-webhook
+        owner-name: build-webhook
+    name: build-webhook-eventsource-g9wbp
+    namespace: build-pipeline
+    ownerReferences:
+        - apiVersion: argoproj.io/v1alpha1
+          blockOwnerDeletion: true
+          controller: true
+          kind: EventSource
+          name: build-webhook
+          uid: 901f709c-28c6-46b5-b829-72a54a82e602
+spec:
+    progressDeadlineSeconds: 600
+    replicas: 1
+    revisionHistoryLimit: 10
+    selector:
+        matchLabels:
+            controller: eventsource-controller
+            eventsource-name: build-webhook
+            owner-name: build-webhook
+    strategy:
+        rollingUpdate:
+            maxSurge: 25%
+            maxUnavailable: 25%
+        type: RollingUpdate
+    template:
+        metadata:
+            creationTimestamp: null
+            labels:
+                controller: eventsource-controller
+                eventsource-name: build-webhook
+                owner-name: build-webhook
+        spec:
+            containers:
+                - args:
+                    - eventsource-service
+                  env:
+                    - name: EVENTSOURCE_OBJECT
+                      value: eyJtZXRhZGF0YSI6eyJuYW1lIjoiYnVpbGQtd2ViaG9vayIsIm5hbWVzcGFjZSI6ImJ1aWxkLXBpcGVsaW5lIiwiY3JlYXRpb25UaW1lc3RhbXAiOm51bGx9LCJzcGVjIjp7IndlYmhvb2siOnsiYnVpbGQtdHJpZ2dlciI6eyJlbmRwb2ludCI6Ii9idWlsZC13ZWJob29rIiwibWV0aG9kIjoiUE9TVCIsInBvcnQiOiIxMjAwMCIsInVybCI6IiJ9fX0sInN0YXR1cyI6e319
+                    - name: EVENTBUS_SUBJECT
+                      value: eventbus-build-pipeline
+                    - name: POD_NAME
+                      valueFrom:
+                        fieldRef:
+                            apiVersion: v1
+                            fieldPath: metadata.name
+                    - name: LEADER_ELECTION
+                    - name: EVENTBUS_CONFIG
+                      value: eyJuYXRzIjp7InVybCI6Im5hdHM6Ly9ldmVudGJ1cy1kZWZhdWx0LXN0YW4tc3ZjOjQyMjIiLCJjbHVzdGVySUQiOiJldmVudGJ1cy1kZWZhdWx0IiwiYXV0aCI6Im5vbmUifX0=
+                  image: quay.io/argoproj/argo-events:v1.9.6
+                  imagePullPolicy: Always
+                  name: main
+                  ports:
+                    - containerPort: 7777
+                      name: metrics
+                      protocol: TCP
+                  resources: {}
+                  terminationMessagePath: /dev/termination-log
+                  terminationMessagePolicy: File
+                  volumeMounts:
+                    - mountPath: /tmp
+                      name: tmp
+            dnsPolicy: ClusterFirst
+            restartPolicy: Always
+            schedulerName: default-scheduler
+            securityContext: {}
+            terminationGracePeriodSeconds: 30
+            volumes:
+                - emptyDir: {}
+                  name: tmp

@@ -1,0 +1,92 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-hybrid-backup
+  namespace: test-backup
+  labels:
+    app: cluster-backup
+    component: hybrid-test
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: cluster-backup
+        component: hybrid-test
+    spec:
+      serviceAccountName: cluster-backup
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+      - name: cluster-backup
+        image: cluster-backup:enhanced-v2
+        imagePullPolicy: Never
+        env:
+        - name: CLUSTER_DOMAIN
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: cluster-domain
+        - name: CLUSTER_NAME
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: cluster-name
+        - name: MINIO_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-endpoint
+        - name: MINIO_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-bucket
+        - name: MINIO_USE_SSL
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-use-ssl
+        - name: MINIO_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-access-key
+        - name: MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-secret-key
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: workspace
+          mountPath: /workspace
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: workspace
+        emptyDir: {}

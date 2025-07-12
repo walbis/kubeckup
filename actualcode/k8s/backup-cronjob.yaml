@@ -1,0 +1,159 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cluster-backup
+  namespace: openshift-backup
+  labels:
+    app: cluster-backup
+    component: backup-cronjob
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 7200  # 2 hours timeout
+      template:
+        metadata:
+          labels:
+            app: cluster-backup
+            component: backup-job
+        spec:
+          serviceAccountName: cluster-backup
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            fsGroup: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: backup
+            image: registry.example.com/openshift/cluster-backup:latest
+            imagePullPolicy: Always
+            env:
+            # All configuration comes from backup-secrets
+            - name: CLUSTER_DOMAIN
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: cluster-domain
+            - name: CLUSTER_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: cluster-name
+            - name: MINIO_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: minio-endpoint
+            - name: MINIO_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: minio-bucket
+            - name: MINIO_USE_SSL
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: minio-use-ssl
+            - name: EXCLUDE_NAMESPACES
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: exclude-namespaces
+            - name: BATCH_SIZE
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: batch-size
+            - name: RETRY_ATTEMPTS
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: retry-attempts
+            - name: RETRY_DELAY
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: retry-delay
+            - name: LOG_LEVEL
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: log-level
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: minio-access-key
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: minio-secret-key
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+              capabilities:
+                drop:
+                - ALL
+            volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: workspace
+              mountPath: /workspace
+            ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            livenessProbe:
+              httpGet:
+                path: /metrics
+                port: metrics
+              initialDelaySeconds: 30
+              periodSeconds: 30
+              timeoutSeconds: 10
+              failureThreshold: 3
+            readinessProbe:
+              httpGet:
+                path: /metrics
+                port: metrics
+              initialDelaySeconds: 5
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 3
+          volumes:
+          - name: tmp
+            emptyDir: {}
+          - name: workspace
+            emptyDir: {}
+          tolerations:
+          - operator: Exists
+            effect: NoSchedule
+          - operator: Exists
+            effect: NoExecute
+          nodeSelector:
+            kubernetes.io/os: linux
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                  - key: node-role.kubernetes.io/worker
+                    operator: Exists

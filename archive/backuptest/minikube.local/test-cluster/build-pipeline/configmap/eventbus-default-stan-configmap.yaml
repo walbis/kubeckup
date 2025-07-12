@@ -1,0 +1,49 @@
+apiVersion: v1
+data:
+    stan-config: |-
+        http: 8222
+        include ./auth.conf
+        cluster {
+          port: 6222
+          routes: [nats://eventbus-default-stan-0.eventbus-default-stan-svc.build-pipeline.svc:6222,nats://eventbus-default-stan-1.eventbus-default-stan-svc.build-pipeline.svc:6222,nats://eventbus-default-stan-2.eventbus-default-stan-svc.build-pipeline.svc:6222]
+          cluster_advertise: $CLUSTER_ADVERTISE
+          connect_retries: 10
+        }
+        max_payload: 1MB
+        streaming {
+          id: eventbus-default
+          store: file
+          dir: /data/stan/store
+          cluster {
+        	node_id: $POD_NAME
+        	peers: ["eventbus-default-stan-0","eventbus-default-stan-1","eventbus-default-stan-2"]
+        	log_path: /data/stan/logs
+        	raft_heartbeat_timeout: "2s"
+        	raft_election_timeout: "2s"
+        	raft_lease_timeout: "1s"
+        	raft_commit_timeout: "100ms"
+          }
+          store_limits {
+            max_age: 72h
+        	max_msgs: 1000000
+        	max_bytes: 1GB
+        	max_subs: 1000
+          }
+        }
+kind: ConfigMap
+metadata:
+    annotations:
+        resource-spec-hash: "3224147648"
+    labels:
+        controller: eventbus-controller
+        eventbus-name: default
+        owner-name: default
+    name: eventbus-default-stan-configmap
+    namespace: build-pipeline
+    ownerReferences:
+        - apiVersion: argoproj.io/v1alpha1
+          blockOwnerDeletion: true
+          controller: true
+          kind: EventBus
+          name: default
+          uid: 00c4fad2-b7a9-4641-87fe-1762448e8fce

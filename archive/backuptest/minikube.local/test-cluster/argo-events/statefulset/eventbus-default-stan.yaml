@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+    annotations:
+        resource-spec-hash: "2426939374"
+    labels:
+        controller: eventbus-controller
+        eventbus-name: default
+        owner-name: default
+    name: eventbus-default-stan
+    namespace: argo-events
+    ownerReferences:
+        - apiVersion: argoproj.io/v1alpha1
+          blockOwnerDeletion: true
+          controller: true
+          kind: EventBus
+          name: default
+          uid: edcc5fb2-7cd1-4c74-b347-1ed46f87cf32
+spec:
+    persistentVolumeClaimRetentionPolicy:
+        whenDeleted: Retain
+        whenScaled: Retain
+    podManagementPolicy: OrderedReady
+    replicas: 3
+    revisionHistoryLimit: 10
+    selector:
+        matchLabels:
+            controller: eventbus-controller
+            eventbus-name: default
+            owner-name: default
+    serviceName: eventbus-default-stan-svc
+    template:
+        metadata:
+            creationTimestamp: null
+            labels:
+                controller: eventbus-controller
+                eventbus-name: default
+                owner-name: default
+        spec:
+            containers:
+                - command:
+                    - /nats-streaming-server
+                    - -sc
+                    - /etc/stan-config/stan.conf
+                  env:
+                    - name: POD_NAME
+                      valueFrom:
+                        fieldRef:
+                            apiVersion: v1
+                            fieldPath: metadata.name
+                    - name: POD_NAMESPACE
+                      valueFrom:
+                        fieldRef:
+                            apiVersion: v1
+                            fieldPath: metadata.namespace
+                    - name: CLUSTER_ADVERTISE
+                      value: $(POD_NAME).eventbus-default-stan-svc.$(POD_NAMESPACE).svc
+                  image: nats-streaming:0.22.1
+                  imagePullPolicy: IfNotPresent
+                  livenessProbe:
+                    failureThreshold: 3
+                    httpGet:
+                        path: /
+                        port: 8222
+                        scheme: HTTP
+                    initialDelaySeconds: 10
+                    periodSeconds: 10
+                    successThreshold: 1
+                    timeoutSeconds: 5
+                  name: stan
+                  ports:
+                    - containerPort: 4222
+                      name: client
+                      protocol: TCP
+                    - containerPort: 6222
+                      name: cluster
+                      protocol: TCP
+                    - containerPort: 8222
+                      name: monitor
+                      protocol: TCP
+                  resources:
+                    requests:
+                        cpu: "0"
+                  terminationMessagePath: /dev/termination-log
+                  terminationMessagePolicy: File
+                  volumeMounts:
+                    - mountPath: /etc/stan-config
+                      name: config-volume
+                    - mountPath: /data/stan
+                      name: stan-data
+                - args:
+                    - -connz
+                    - -routez
+                    - -subz
+                    - -varz
+                    - -channelz
+                    - -serverz
+                    - http://localhost:8222
+                  image: natsio/prometheus-nats-exporter:0.8.0
+                  imagePullPolicy: IfNotPresent
+                  name: metrics
+                  ports:
+                    - containerPort: 7777
+                      name: metrics
+                      protocol: TCP
+                  resources: {}
+                  terminationMessagePath: /dev/termination-log
+                  terminationMessagePolicy: File
+            dnsPolicy: ClusterFirst
+            restartPolicy: Always
+            schedulerName: default-scheduler
+            securityContext: {}
+            terminationGracePeriodSeconds: 30
+            volumes:
+                - name: config-volume
+                  projected:
+                    defaultMode: 420
+                    sources:
+                        - configMap:
+                            items:
+                                - key: stan-config
+                                  path: stan.conf
+                            name: eventbus-default-stan-configmap
+                        - secret:
+                            items:
+                                - key: auth
+                                  path: auth.conf
+                            name: eventbus-default-server
+                - emptyDir: {}
+                  name: stan-data
+    updateStrategy:
+        rollingUpdate:
+            partition: 0
+        type: RollingUpdate

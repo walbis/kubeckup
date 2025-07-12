@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    annotations:
+        resource-spec-hash: "998662875"
+    generateName: buildkit-webhook-eventsource-
+    labels:
+        controller: eventsource-controller
+        eventsource-name: buildkit-webhook
+        owner-name: buildkit-webhook
+    name: buildkit-webhook-eventsource-5vb4f
+    namespace: argo-events
+    ownerReferences:
+        - apiVersion: argoproj.io/v1alpha1
+          blockOwnerDeletion: true
+          controller: true
+          kind: EventSource
+          name: buildkit-webhook
+          uid: c3690331-5c40-4f82-86df-5208301605ca
+spec:
+    progressDeadlineSeconds: 600
+    replicas: 1
+    revisionHistoryLimit: 10
+    selector:
+        matchLabels:
+            controller: eventsource-controller
+            eventsource-name: buildkit-webhook
+            owner-name: buildkit-webhook
+    strategy:
+        rollingUpdate:
+            maxSurge: 25%
+            maxUnavailable: 25%
+        type: RollingUpdate
+    template:
+        metadata:
+            creationTimestamp: null
+            labels:
+                controller: eventsource-controller
+                eventsource-name: buildkit-webhook
+                owner-name: buildkit-webhook
+        spec:
+            containers:
+                - args:
+                    - eventsource-service
+                  env:
+                    - name: EVENTSOURCE_OBJECT
+                      value: eyJtZXRhZGF0YSI6eyJuYW1lIjoiYnVpbGRraXQtd2ViaG9vayIsIm5hbWVzcGFjZSI6ImFyZ28tZXZlbnRzIiwiY3JlYXRpb25UaW1lc3RhbXAiOm51bGx9LCJzcGVjIjp7IndlYmhvb2siOnsiYnVpbGRraXQtdHJpZ2dlciI6eyJlbmRwb2ludCI6Ii9idWlsZGtpdCIsIm1ldGhvZCI6IlBPU1QiLCJwb3J0IjoiMTIwMDAiLCJ1cmwiOiIifX19LCJzdGF0dXMiOnt9fQ==
+                    - name: EVENTBUS_SUBJECT
+                      value: eventbus-argo-events
+                    - name: POD_NAME
+                      valueFrom:
+                        fieldRef:
+                            apiVersion: v1
+                            fieldPath: metadata.name
+                    - name: LEADER_ELECTION
+                    - name: EVENTBUS_CONFIG
+                      value: eyJuYXRzIjp7InVybCI6Im5hdHM6Ly9ldmVudGJ1cy1kZWZhdWx0LXN0YW4tc3ZjOjQyMjIiLCJjbHVzdGVySUQiOiJldmVudGJ1cy1kZWZhdWx0IiwiYXV0aCI6InRva2VuIiwiYWNjZXNzU2VjcmV0Ijp7Im5hbWUiOiJldmVudGJ1cy1kZWZhdWx0LWNsaWVudCIsImtleSI6ImNsaWVudC1hdXRoIn19fQ==
+                  image: quay.io/argoproj/argo-events:v1.9.6
+                  imagePullPolicy: Always
+                  name: main
+                  ports:
+                    - containerPort: 7777
+                      name: metrics
+                      protocol: TCP
+                  resources: {}
+                  terminationMessagePath: /dev/termination-log
+                  terminationMessagePolicy: File
+                  volumeMounts:
+                    - mountPath: /etc/eventbus/auth
+                      name: auth-volume
+                    - mountPath: /tmp
+                      name: tmp
+            dnsPolicy: ClusterFirst
+            restartPolicy: Always
+            schedulerName: default-scheduler
+            securityContext: {}
+            terminationGracePeriodSeconds: 30
+            volumes:
+                - name: auth-volume
+                  secret:
+                    defaultMode: 420
+                    items:
+                        - key: client-auth
+                          path: auth.yaml
+                    secretName: eventbus-default-client
+                - emptyDir: {}
+                  name: tmp

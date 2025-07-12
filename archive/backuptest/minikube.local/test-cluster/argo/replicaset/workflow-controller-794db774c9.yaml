@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+    annotations:
+        deployment.kubernetes.io/desired-replicas: "1"
+        deployment.kubernetes.io/max-replicas: "2"
+    labels:
+        app: workflow-controller
+        pod-template-hash: 794db774c9
+    name: workflow-controller-794db774c9
+    namespace: argo
+    ownerReferences:
+        - apiVersion: apps/v1
+          blockOwnerDeletion: true
+          controller: true
+          kind: Deployment
+          name: workflow-controller
+          uid: 9093b271-fe38-4015-a6ad-c1867e915d01
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: workflow-controller
+            pod-template-hash: 794db774c9
+    template:
+        metadata:
+            creationTimestamp: null
+            labels:
+                app: workflow-controller
+                pod-template-hash: 794db774c9
+        spec:
+            containers:
+                - command:
+                    - workflow-controller
+                  env:
+                    - name: LEADER_ELECTION_IDENTITY
+                      valueFrom:
+                        fieldRef:
+                            apiVersion: v1
+                            fieldPath: metadata.name
+                  image: quay.io/argoproj/workflow-controller:v3.5.5
+                  imagePullPolicy: IfNotPresent
+                  livenessProbe:
+                    failureThreshold: 3
+                    httpGet:
+                        path: /healthz
+                        port: 6060
+                        scheme: HTTP
+                    initialDelaySeconds: 90
+                    periodSeconds: 60
+                    successThreshold: 1
+                    timeoutSeconds: 30
+                  name: workflow-controller
+                  ports:
+                    - containerPort: 9090
+                      name: metrics
+                      protocol: TCP
+                    - containerPort: 6060
+                      protocol: TCP
+                  resources: {}
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    capabilities:
+                        drop:
+                            - ALL
+                    readOnlyRootFilesystem: true
+                    runAsNonRoot: true
+                  terminationMessagePath: /dev/termination-log
+                  terminationMessagePolicy: File
+            dnsPolicy: ClusterFirst
+            nodeSelector:
+                kubernetes.io/os: linux
+            priorityClassName: workflow-controller
+            restartPolicy: Always
+            schedulerName: default-scheduler
+            securityContext:
+                runAsNonRoot: true
+            serviceAccount: argo
+            serviceAccountName: argo
+            terminationGracePeriodSeconds: 30

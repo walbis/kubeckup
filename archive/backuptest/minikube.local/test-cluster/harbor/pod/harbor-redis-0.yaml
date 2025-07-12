@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: Pod
+metadata:
+    generateName: harbor-redis-
+    labels:
+        app: harbor
+        app.kubernetes.io/component: redis
+        app.kubernetes.io/instance: harbor
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: harbor
+        app.kubernetes.io/part-of: harbor
+        app.kubernetes.io/version: 2.13.1
+        apps.kubernetes.io/pod-index: "0"
+        chart: harbor
+        component: redis
+        controller-revision-hash: harbor-redis-75cb9c77db
+        heritage: Helm
+        release: harbor
+        statefulset.kubernetes.io/pod-name: harbor-redis-0
+    name: harbor-redis-0
+    namespace: harbor
+    ownerReferences:
+        - apiVersion: apps/v1
+          blockOwnerDeletion: true
+          controller: true
+          kind: StatefulSet
+          name: harbor-redis
+          uid: 595e85e1-cc96-4f04-aace-10bb8fc91095
+spec:
+    automountServiceAccountToken: false
+    containers:
+        - image: goharbor/redis-photon:v2.13.1
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 300
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+                port: 6379
+            timeoutSeconds: 1
+          name: redis
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+                port: 6379
+            timeoutSeconds: 1
+          resources: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+                drop:
+                    - ALL
+            privileged: false
+            runAsNonRoot: true
+            seccompProfile:
+                type: RuntimeDefault
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /var/lib/redis
+              name: data
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    hostname: harbor-redis-0
+    preemptionPolicy: PreemptLowerPriority
+    priority: 0
+    restartPolicy: Always
+    schedulerName: default-scheduler
+    securityContext:
+        fsGroup: 999
+        runAsUser: 999
+    serviceAccount: default
+    serviceAccountName: default
+    subdomain: harbor-redis
+    terminationGracePeriodSeconds: 120
+    tolerations:
+        - effect: NoExecute
+          key: node.kubernetes.io/not-ready
+          operator: Exists
+          tolerationSeconds: 300
+        - effect: NoExecute
+          key: node.kubernetes.io/unreachable
+          operator: Exists
+          tolerationSeconds: 300
+    volumes:
+        - emptyDir: {}
+          name: data

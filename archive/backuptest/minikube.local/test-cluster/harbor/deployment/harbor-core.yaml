@@ -1,0 +1,158 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    annotations:
+        meta.helm.sh/release-name: harbor
+        meta.helm.sh/release-namespace: harbor
+    labels:
+        app: harbor
+        app.kubernetes.io/component: core
+        app.kubernetes.io/instance: harbor
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: harbor
+        app.kubernetes.io/part-of: harbor
+        app.kubernetes.io/version: 2.13.1
+        chart: harbor
+        component: core
+        heritage: Helm
+        release: harbor
+    name: harbor-core
+    namespace: harbor
+spec:
+    progressDeadlineSeconds: 600
+    replicas: 1
+    revisionHistoryLimit: 10
+    selector:
+        matchLabels:
+            app: harbor
+            component: core
+            release: harbor
+    strategy:
+        rollingUpdate:
+            maxSurge: 25%
+            maxUnavailable: 25%
+        type: RollingUpdate
+    template:
+        metadata:
+            annotations:
+                checksum/configmap: e3fb8c7c3d8c8bb5b56517b7d2881f528539585c4fd63110218db569a4980156
+                checksum/secret: 67e290f982591da0dccfef3ffa0edeb4f7ea29382f0d530c3f145bee4b0901b7
+                checksum/secret-jobservice: b7a2dfa4fa5b6d7d553a2dba435f716b7a48faf8b3e43b54884cdb3ff1c4a912
+            creationTimestamp: null
+            labels:
+                app: harbor
+                app.kubernetes.io/component: core
+                app.kubernetes.io/instance: harbor
+                app.kubernetes.io/managed-by: Helm
+                app.kubernetes.io/name: harbor
+                app.kubernetes.io/part-of: harbor
+                app.kubernetes.io/version: 2.13.1
+                chart: harbor
+                component: core
+                heritage: Helm
+                release: harbor
+        spec:
+            automountServiceAccountToken: false
+            containers:
+                - env:
+                    - name: CORE_SECRET
+                      valueFrom:
+                        secretKeyRef:
+                            key: secret
+                            name: harbor-core
+                    - name: JOBSERVICE_SECRET
+                      valueFrom:
+                        secretKeyRef:
+                            key: JOBSERVICE_SECRET
+                            name: harbor-jobservice
+                  envFrom:
+                    - configMapRef:
+                        name: harbor-core
+                    - secretRef:
+                        name: harbor-core
+                  image: goharbor/harbor-core:v2.13.1
+                  imagePullPolicy: IfNotPresent
+                  livenessProbe:
+                    failureThreshold: 2
+                    httpGet:
+                        path: /api/v2.0/ping
+                        port: 8080
+                        scheme: HTTP
+                    periodSeconds: 10
+                    successThreshold: 1
+                    timeoutSeconds: 1
+                  name: core
+                  ports:
+                    - containerPort: 8080
+                      protocol: TCP
+                  readinessProbe:
+                    failureThreshold: 2
+                    httpGet:
+                        path: /api/v2.0/ping
+                        port: 8080
+                        scheme: HTTP
+                    periodSeconds: 10
+                    successThreshold: 1
+                    timeoutSeconds: 1
+                  resources: {}
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    capabilities:
+                        drop:
+                            - ALL
+                    privileged: false
+                    runAsNonRoot: true
+                    seccompProfile:
+                        type: RuntimeDefault
+                  startupProbe:
+                    failureThreshold: 360
+                    httpGet:
+                        path: /api/v2.0/ping
+                        port: 8080
+                        scheme: HTTP
+                    initialDelaySeconds: 10
+                    periodSeconds: 10
+                    successThreshold: 1
+                    timeoutSeconds: 1
+                  terminationMessagePath: /dev/termination-log
+                  terminationMessagePolicy: File
+                  volumeMounts:
+                    - mountPath: /etc/core/app.conf
+                      name: config
+                      subPath: app.conf
+                    - mountPath: /etc/core/key
+                      name: secret-key
+                      subPath: key
+                    - mountPath: /etc/core/private_key.pem
+                      name: token-service-private-key
+                      subPath: tls.key
+                    - mountPath: /etc/core/token
+                      name: psc
+            dnsPolicy: ClusterFirst
+            restartPolicy: Always
+            schedulerName: default-scheduler
+            securityContext:
+                fsGroup: 10000
+                runAsUser: 10000
+            terminationGracePeriodSeconds: 120
+            volumes:
+                - configMap:
+                    defaultMode: 420
+                    items:
+                        - key: app.conf
+                          path: app.conf
+                    name: harbor-core
+                  name: config
+                - name: secret-key
+                  secret:
+                    defaultMode: 420
+                    items:
+                        - key: secretKey
+                          path: key
+                    secretName: harbor-core
+                - name: token-service-private-key
+                  secret:
+                    defaultMode: 420
+                    secretName: harbor-core
+                - emptyDir: {}
+                  name: psc

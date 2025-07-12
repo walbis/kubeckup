@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+    annotations:
+        deployment.kubernetes.io/desired-replicas: "2"
+        deployment.kubernetes.io/max-replicas: "3"
+    labels:
+        app: build-management-service
+        pod-template-hash: 7cd88df999
+        version: 1.0.0
+    name: build-management-service-7cd88df999
+    namespace: build-pipeline
+    ownerReferences:
+        - apiVersion: apps/v1
+          blockOwnerDeletion: true
+          controller: true
+          kind: Deployment
+          name: build-management-service
+          uid: 4f6df49a-ee7b-465d-9526-d51560dd588f
+spec:
+    replicas: 0
+    selector:
+        matchLabels:
+            app: build-management-service
+            pod-template-hash: 7cd88df999
+    template:
+        metadata:
+            creationTimestamp: null
+            labels:
+                app: build-management-service
+                pod-template-hash: 7cd88df999
+                version: 1.0.0
+        spec:
+            containers:
+                - env:
+                    - name: PORT
+                      value: "8080"
+                    - name: BUILD_STATUS_SERVICE
+                      value: http://build-status-service:80
+                    - name: BUILD_HISTORY_SERVICE
+                      value: http://build-history-service:80
+                    - name: ARGO_WORKFLOWS_API
+                      value: http://argo-server.argo:2746
+                    - name: ARGO_EVENTS_API
+                      value: http://argo-events-controller.argo-events:8080
+                    - name: WORKFLOW_NAMESPACE
+                      value: build-pipeline
+                    - name: WORKFLOW_TEMPLATE
+                      value: build-workflow-template
+                    - name: WEBHOOK_URL
+                      value: http://build-webhook-service:12000/build-webhook
+                  image: localhost/build-management-service:latest
+                  imagePullPolicy: IfNotPresent
+                  livenessProbe:
+                    failureThreshold: 3
+                    httpGet:
+                        path: /api/v1/health
+                        port: 8080
+                        scheme: HTTP
+                    initialDelaySeconds: 30
+                    periodSeconds: 10
+                    successThreshold: 1
+                    timeoutSeconds: 5
+                  name: build-management-service
+                  ports:
+                    - containerPort: 8080
+                      name: http
+                      protocol: TCP
+                  readinessProbe:
+                    failureThreshold: 3
+                    httpGet:
+                        path: /api/v1/health
+                        port: 8080
+                        scheme: HTTP
+                    initialDelaySeconds: 5
+                    periodSeconds: 5
+                    successThreshold: 1
+                    timeoutSeconds: 3
+                  resources:
+                    limits:
+                        cpu: 500m
+                        memory: 512Mi
+                    requests:
+                        cpu: 100m
+                        memory: 128Mi
+                  terminationMessagePath: /dev/termination-log
+                  terminationMessagePolicy: File
+            dnsPolicy: ClusterFirst
+            restartPolicy: Always
+            schedulerName: default-scheduler
+            securityContext: {}
+            serviceAccount: build-management-service
+            serviceAccountName: build-management-service
+            terminationGracePeriodSeconds: 30

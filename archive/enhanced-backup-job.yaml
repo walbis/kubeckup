@@ -1,0 +1,111 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: enhanced-backup-test
+  namespace: test-backup
+  labels:
+    app: cluster-backup
+    component: enhanced-test-job
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 900  # 15 minutes
+  template:
+    metadata:
+      labels:
+        app: cluster-backup
+        component: enhanced-test-job
+    spec:
+      serviceAccountName: cluster-backup
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+      - name: cluster-backup
+        image: cluster-backup:enhanced-v1
+        imagePullPolicy: Never
+        env:
+        # Cluster identification
+        - name: CLUSTER_DOMAIN
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: cluster-domain
+        - name: CLUSTER_NAME
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: cluster-name
+        # MinIO Configuration
+        - name: MINIO_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-endpoint
+        - name: MINIO_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-bucket
+        - name: MINIO_USE_SSL
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-use-ssl
+        - name: MINIO_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-access-key
+        - name: MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: minio-secret-key
+        # Backup Configuration
+        - name: BATCH_SIZE
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: batch-size
+        - name: RETRY_ATTEMPTS
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: retry-attempts
+        - name: RETRY_DELAY
+          valueFrom:
+            secretKeyRef:
+              name: backup-secrets
+              key: retry-delay
+        # Pod namespace for ConfigMap access
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: workspace
+          mountPath: /workspace
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: workspace
+        emptyDir: {}

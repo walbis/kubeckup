@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+    annotations: {}
+    labels:
+        app: build-status-service
+        component: backend
+    name: build-status-service
+    namespace: build-pipeline
+spec:
+    clusterIP: 10.102.112.101
+    clusterIPs:
+        - 10.102.112.101
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+        - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+        - name: http
+          port: 80
+          protocol: TCP
+          targetPort: 8080
+    selector:
+        app: build-status-service
+    sessionAffinity: None
+    type: ClusterIP

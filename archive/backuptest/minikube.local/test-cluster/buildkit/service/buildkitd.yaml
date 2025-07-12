@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+    annotations:
+        prometheus.io/port: "1234"
+        prometheus.io/scrape: "true"
+    labels:
+        app: buildkitd
+    name: buildkitd
+    namespace: buildkit
+spec:
+    clusterIP: 10.106.11.214
+    clusterIPs:
+        - 10.106.11.214
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+        - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+        - name: tcp
+          port: 1234
+          protocol: TCP
+          targetPort: 1234
+    selector:
+        app: buildkitd
+    sessionAffinity: None
+    type: ClusterIP

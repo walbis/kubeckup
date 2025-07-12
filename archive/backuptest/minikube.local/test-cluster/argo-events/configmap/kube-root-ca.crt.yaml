@@ -1,0 +1,28 @@
+apiVersion: v1
+data:
+    ca.crt: |
+        -----BEGIN CERTIFICATE-----
+        MIIDBjCCAe6gAwIBAgIBATANBgkqhkiG9w0BAQsFADAVMRMwEQYDVQQDEwptaW5p
+        a3ViZUNBMB4XDTI1MDcwNjE3MTg1OVoXDTM1MDcwNTE3MTg1OVowFTETMBEGA1UE
+        AxMKbWluaWt1YmVDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAP4A
+        f4j7wtoYVuI1UvaCP4IaIeHvP9DokYL/GY6RFBsWFG3kS7W8EslYNWxpvnW7cqe2
+        ZIcssD1iq4zOtbwHX61uC+Bu7PvmLkwBlL6Tq7HInOxWk0iAHoCK8IF0eW0LI4Qr
+        RV8u76dvDSjxAm3eAJk0+KfH1czFG9AoCVlecxPjZCzxGbjy4+k7484tBuXf3n7f
+        XSa4dikeYEM6pWDEUCXnzSKxiHbWZm7oJwxJ87RJxuCMHCunD0jKVHdAXIU2kJvw
+        hbfleW3EyaqoPOnz6gCw9ZgowOXzRX6s3dbaDH5L6lm+NSK1PF5pZ1MHBTJaWoGC
+        vFJA67SunuVs7EQgbCkCAwEAAaNhMF8wDgYDVR0PAQH/BAQDAgKkMB0GA1UdJQQW
+        MBQGCCsGAQUFBwMCBggrBgEFBQcDATAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQW
+        BBSslFcRPtGsDMF6Gv/Js6AhWVviQTANBgkqhkiG9w0BAQsFAAOCAQEAxxDBwm0z
+        MbTdSiNSP8fUJmgiE3mnNxjILCWz4jxSa0gybuxbA8fDQ8LnH+H31Rio1shtSXW2
+        7CgD7K7MfxFjj5GXAOjycJ6vWWlnPXceBdnVgd2GsRksE9HYxwjzQSMeJqoF5yEj
+        1XoSLUCyqS3VQ4PNEFTCxcVrFOWOozXorMWSskOa0DweLGIDPfvYnYHiHc5SvVtQ
+        XUFpw1hDWUTsYoRHC1k3pqS/lilCfcsdLmU4wsfyQJVCkv48U118oHTxTBWMW+pe
+        tArA21dHvEaR1QY/AS9liW7oSPjY/Dc+6AwROS4fHvp5S9Yw1yndUZpWfn7sgetJ
+        856NPFiaBe6bCQ==
+        -----END CERTIFICATE-----
+kind: ConfigMap
+metadata:
+    annotations:
+        kubernetes.io/description: Contains a CA bundle that can be used to verify the kube-apiserver when using internal endpoints such as the internal service IP or kubernetes.default.svc. No other usage is guaranteed across distributions of Kubernetes clusters.
+    name: kube-root-ca.crt
+    namespace: argo-events
