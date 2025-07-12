@@ -61,6 +61,10 @@ backup:
     batchSize: 100
     retryAttempts: 3
     logLevel: "info"
+    # Enable cleanup with 30-day retention for production
+    enableCleanup: true
+    retentionDays: 30
+    cleanupOnStartup: false
   resources:
     requests:
       cpu: 500m

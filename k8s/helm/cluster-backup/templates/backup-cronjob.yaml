@@ -81,6 +81,23 @@ spec:
             - name: LOG_LEVEL
               value: {{ .Values.backup.config.logLevel | quote }}
             
+            # Cleanup Configuration
+            - name: ENABLE_CLEANUP
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup.fullname" . }}-backup-secrets
+                  key: enable-cleanup
+            - name: RETENTION_DAYS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup.fullname" . }}-backup-secrets
+                  key: retention-days
+            - name: CLEANUP_ON_STARTUP
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup.fullname" . }}-backup-secrets
+                  key: cleanup-on-startup
+            
             {{- with .Values.extra.backupEnvVars }}
             {{- range $key, $value := . }}
             - name: {{ $key }}

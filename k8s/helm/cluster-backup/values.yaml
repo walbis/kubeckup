@@ -110,6 +110,10 @@ backup:
     logLevel: "info"
     # Additional exclude namespaces
     additionalExcludeNamespaces: []
+    # Cleanup configuration
+    enableCleanup: false
+    retentionDays: 7
+    cleanupOnStartup: false
   # Resource limits and requests
   resources:
     requests:

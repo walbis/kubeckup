@@ -1,0 +1,25 @@
+cluster:
+  name: "cleanup-test-cluster"
+
+minio:
+  endpoint: "localhost:9000"
+  useSSL: false
+  credentials:
+    accessKey: "minioadmin"
+    secretKey: "minioadmin"
+
+backup:
+  enabled: true
+  config:
+    enableCleanup: true
+    retentionDays: 3
+    cleanupOnStartup: true
+
+gitSync:
+  enabled: false
+
+monitoring:
+  enabled: false
+
+development:
+  enabled: true

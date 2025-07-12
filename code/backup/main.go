@@ -38,6 +38,10 @@ type Config struct {
 	BatchSize         int
 	RetryAttempts     int
 	RetryDelay        time.Duration
+	// Cleanup configuration
+	EnableCleanup     bool
+	RetentionDays     int
+	CleanupOnStartup  bool
 }
 
 type BackupConfig struct {
@@ -57,6 +61,10 @@ type BackupConfig struct {
 	IncludeOpenShiftRes     bool
 	ValidateYAML            bool
 	SkipInvalidResources    bool
+	// Cleanup configuration
+	EnableCleanup           bool
+	RetentionDays           int
+	CleanupOnStartup        bool
 }
 
 type ClusterBackup struct {
@@ -150,8 +158,24 @@ func main() {
 	// Start metrics server in a goroutine
 	go startMetricsServer()
 
+	// Perform cleanup on startup if configured
+	if backup.shouldCleanupOnStartup() {
+		logger.Info("cleanup_startup", "Performing cleanup on startup", nil)
+		if err := backup.performCleanup(); err != nil {
+			logger.Error("cleanup_startup_failed", "Startup cleanup failed", map[string]interface{}{"error": err.Error()})
+		}
+	}
+
 	if err := backup.Run(); err != nil {
 		logger.Fatal("backup_run", "Backup failed", map[string]interface{}{"error": err.Error()})
+	}
+
+	// Perform cleanup after backup if configured
+	if backup.backupConfig.EnableCleanup && !backup.backupConfig.CleanupOnStartup {
+		logger.Info("cleanup_post_backup", "Performing cleanup after backup", nil)
+		if err := backup.performCleanup(); err != nil {
+			logger.Error("cleanup_post_backup_failed", "Post-backup cleanup failed", map[string]interface{}{"error": err.Error()})
+		}
 	}
 
 	logger.Info("backup_complete", "Backup completed successfully", nil)
@@ -159,16 +183,20 @@ func main() {
 
 func loadConfig() (*Config, error) {
 	config := &Config{
-		ClusterDomain:  getSecretValue("CLUSTER_DOMAIN", "cluster.local"),
-		ClusterName:    getSecretValue("CLUSTER_NAME", "default"),
-		MinIOEndpoint:  getSecretValue("MINIO_ENDPOINT", ""),
-		MinIOAccessKey: getSecretValue("MINIO_ACCESS_KEY", ""),
-		MinIOSecretKey: getSecretValue("MINIO_SECRET_KEY", ""),
-		MinIOBucket:    getSecretValue("MINIO_BUCKET", "cluster-backups"),
-		MinIOUseSSL:    getSecretValue("MINIO_USE_SSL", "true") == "true",
-		BatchSize:      50,
-		RetryAttempts:  3,
-		RetryDelay:     5 * time.Second,
+		ClusterDomain:     getSecretValue("CLUSTER_DOMAIN", "cluster.local"),
+		ClusterName:       getSecretValue("CLUSTER_NAME", "default"),
+		MinIOEndpoint:     getSecretValue("MINIO_ENDPOINT", ""),
+		MinIOAccessKey:    getSecretValue("MINIO_ACCESS_KEY", ""),
+		MinIOSecretKey:    getSecretValue("MINIO_SECRET_KEY", ""),
+		MinIOBucket:       getSecretValue("MINIO_BUCKET", "cluster-backups"),
+		MinIOUseSSL:       getSecretValue("MINIO_USE_SSL", "true") == "true",
+		BatchSize:         50,
+		RetryAttempts:     3,
+		RetryDelay:        5 * time.Second,
+		// Cleanup configuration
+		EnableCleanup:     getSecretValue("ENABLE_CLEANUP", "false") == "true",
+		RetentionDays:     7, // Default to 7 days
+		CleanupOnStartup:  getSecretValue("CLEANUP_ON_STARTUP", "false") == "true",
 	}
 
 	// Parse batch size from secret
@@ -189,6 +217,13 @@ func loadConfig() (*Config, error) {
 	if delayStr := getSecretValue("RETRY_DELAY", "5s"); delayStr != "" {
 		if delay, err := time.ParseDuration(delayStr); err == nil {
 			config.RetryDelay = delay
+		}
+	}
+
+	// Parse retention days from secret
+	if retentionStr := getSecretValue("RETENTION_DAYS", "7"); retentionStr != "" {
+		if retention, err := strconv.Atoi(retentionStr); err == nil && retention > 0 {
+			config.RetentionDays = retention
 		}
 	}
 
@@ -276,6 +311,18 @@ func parseBackupConfig(cm *corev1.ConfigMap) *BackupConfig {
 	if val, ok := cm.Data["skip-invalid-resources"]; ok {
 		config.SkipInvalidResources = val == "true"
 	}
+	// Cleanup configuration from ConfigMap
+	if val, ok := cm.Data["enable-cleanup"]; ok {
+		config.EnableCleanup = val == "true"
+	}
+	if val, ok := cm.Data["retention-days"]; ok {
+		if retention, err := strconv.Atoi(val); err == nil && retention > 0 {
+			config.RetentionDays = retention
+		}
+	}
+	if val, ok := cm.Data["cleanup-on-startup"]; ok {
+		config.CleanupOnStartup = val == "true"
+	}
 
 	return config
 }
@@ -305,6 +352,10 @@ func getDefaultBackupConfig() *BackupConfig {
 		FollowOwnerReferences: false,
 		IncludeManagedFields:  false,
 		IncludeStatus:         false,
+		// Cleanup configuration defaults
+		EnableCleanup:         false,
+		RetentionDays:         7,
+		CleanupOnStartup:      false,
 	}
 }
 
@@ -1084,4 +1135,97 @@ func startMetricsServer() {
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Printf("Failed to start backup metrics server: %v", err)
 	}
+}
+
+// Cleanup functions for managing backup retention
+func (cb *ClusterBackup) performCleanup() error {
+	if !cb.backupConfig.EnableCleanup {
+		cb.logger.Debug("cleanup_skip", "Cleanup disabled in configuration", nil)
+		return nil
+	}
+
+	cb.logger.Info("cleanup_start", "Starting backup cleanup process", map[string]interface{}{
+		"retention_days": cb.backupConfig.RetentionDays,
+		"cluster": cb.config.ClusterName,
+	})
+
+	startTime := time.Now()
+	cutoffTime := startTime.AddDate(0, 0, -cb.backupConfig.RetentionDays)
+	
+	// List all objects for this cluster
+	prefix := fmt.Sprintf("clusterbackup/%s", cb.config.ClusterName)
+	objects := cb.minioClient.ListObjects(cb.ctx, cb.config.MinIOBucket, minio.ListObjectsOptions{
+		Prefix: prefix,
+	})
+
+	var cleanedCount int
+	var cleanedSize int64
+	var errors []string
+
+	for object := range objects {
+		if object.Err != nil {
+			cb.logger.Error("cleanup_list_error", "Error listing object during cleanup", map[string]interface{}{
+				"error": object.Err.Error(),
+			})
+			continue
+		}
+
+		// Check if object is older than retention period
+		if object.LastModified.Before(cutoffTime) {
+			err := cb.minioClient.RemoveObject(cb.ctx, cb.config.MinIOBucket, object.Key, minio.RemoveObjectOptions{})
+			if err != nil {
+				errorMsg := fmt.Sprintf("Failed to remove %s: %v", object.Key, err)
+				errors = append(errors, errorMsg)
+				cb.logger.Error("cleanup_remove_error", "Failed to remove old backup file", map[string]interface{}{
+					"object_key": object.Key,
+					"error": err.Error(),
+				})
+			} else {
+				cleanedCount++
+				cleanedSize += object.Size
+				cb.logger.Debug("cleanup_remove_success", "Removed old backup file", map[string]interface{}{
+					"object_key": object.Key,
+					"size": object.Size,
+					"last_modified": object.LastModified,
+				})
+			}
+		}
+	}
+
+	duration := time.Since(startTime)
+	
+	if len(errors) > 0 {
+		cb.logger.Warn("cleanup_complete_with_errors", "Cleanup completed with some errors", map[string]interface{}{
+			"cleaned_files": cleanedCount,
+			"cleaned_size_bytes": cleanedSize,
+			"errors_count": len(errors),
+			"duration_ms": duration.Milliseconds(),
+		})
+	} else {
+		cb.logger.Info("cleanup_complete", "Cleanup completed successfully", map[string]interface{}{
+			"cleaned_files": cleanedCount,
+			"cleaned_size_bytes": cleanedSize,
+			"duration_ms": duration.Milliseconds(),
+		})
+	}
+
+	return nil
+}
+
+func (cb *ClusterBackup) addBackupMetadata(obj *unstructured.Unstructured) {
+	// Add backup metadata to the object
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	
+	annotations["backup.cluster/timestamp"] = time.Now().Format(time.RFC3339)
+	annotations["backup.cluster/cluster"] = cb.config.ClusterName
+	annotations["backup.cluster/version"] = "1.0.0"
+	
+	obj.SetAnnotations(annotations)
+}
+
+func (cb *ClusterBackup) shouldCleanupOnStartup() bool {
+	return cb.backupConfig.EnableCleanup && cb.backupConfig.CleanupOnStartup
 }

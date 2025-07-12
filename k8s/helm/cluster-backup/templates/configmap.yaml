@@ -58,3 +58,14 @@ data:
   retry-attempts: {{ .Values.backup.config.retryAttempts | quote }}
   retry-delay: {{ .Values.backup.config.retryDelay | quote }}
   log-level: {{ .Values.backup.config.logLevel | quote }}
+  
+  # Cleanup configuration
+  {{- if hasKey .Values.backup.config "enableCleanup" }}
+  enable-cleanup: {{ .Values.backup.config.enableCleanup | quote }}
+  {{- end }}
+  {{- if hasKey .Values.backup.config "retentionDays" }}
+  retention-days: {{ .Values.backup.config.retentionDays | quote }}
+  {{- end }}
+  {{- if hasKey .Values.backup.config "cleanupOnStartup" }}
+  cleanup-on-startup: {{ .Values.backup.config.cleanupOnStartup | quote }}
+  {{- end }}
