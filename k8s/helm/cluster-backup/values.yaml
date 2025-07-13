@@ -111,7 +111,7 @@ backup:
     # Additional exclude namespaces
     additionalExcludeNamespaces: []
     # Cleanup configuration
-    enableCleanup: false
+    enableCleanup: true
     retentionDays: 7
     cleanupOnStartup: false
   # Resource limits and requests

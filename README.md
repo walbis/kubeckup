@@ -18,6 +18,7 @@ A comprehensive backup solution for multi-cluster Kubernetes/OpenShift environme
 - **Security Hardened**: Non-root containers, read-only filesystems, comprehensive RBAC
 - **Resource Optimization**: Configurable batch processing and retry mechanisms
 - **Health Checks**: Built-in health endpoints for container orchestration
+- **Automatic Cleanup**: Configurable backup retention with automatic old file removal
 
 ## 📋 Architecture
 
@@ -134,9 +135,9 @@ Configure logging verbosity via environment variable:
 - Multi-cluster coordination
 - Authentication and authorization events
 
-## 🎯 Resource Filtering
+## 🎯 Resource Filtering & Cleanup
 
-### Filtering Modes
+### Filtering Modes & Retention
 
 ```yaml
 apiVersion: v1
@@ -173,6 +174,11 @@ data:
   include-crds: |
     workflows.argoproj.io
     routes.route.openshift.io
+  
+  # Backup retention and cleanup (NEW)
+  enable-cleanup: "true"
+  retention-days: "7"
+  cleanup-on-startup: "false"
 ```
 
 ## 📈 Monitoring & Metrics
@@ -308,6 +314,9 @@ time() - cluster_backup_last_success_timestamp
 - `MINIO_BUCKET`: Target bucket name
 - `MINIO_USE_SSL`: Enable SSL/TLS (default: true)
 - `LOG_LEVEL`: Logging verbosity (debug, info, warn, error)
+- `ENABLE_CLEANUP`: Enable automatic cleanup (default: true)
+- `RETENTION_DAYS`: Number of days to retain backups (default: 7)
+- `CLEANUP_ON_STARTUP`: Perform cleanup on startup vs after backup (default: false)
 
 **Git-Sync Service:**
 - `GIT_REPOSITORY`: Git repository URL
@@ -365,3 +374,4 @@ This backup system is production-ready with:
 - ✅ OpenShift compatibility
 - ✅ Flexible resource filtering
 - ✅ Error handling and retry mechanisms
+- ✅ Automatic backup cleanup and retention management

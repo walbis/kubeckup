@@ -69,6 +69,11 @@ backup:
     excludeResources:
       - events
       - nodes
+  config:
+    # Cleanup configuration (NEW)
+    enableCleanup: true    # Enable automatic cleanup
+    retentionDays: 7       # Retain backups for 7 days
+    cleanupOnStartup: false # Cleanup after backup, not on startup
 ```
 
 ### Git-Sync Configuration
