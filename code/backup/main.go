@@ -194,7 +194,7 @@ func loadConfig() (*Config, error) {
 		RetryAttempts:     3,
 		RetryDelay:        5 * time.Second,
 		// Cleanup configuration
-		EnableCleanup:     getSecretValue("ENABLE_CLEANUP", "false") == "true",
+		EnableCleanup:     getSecretValue("ENABLE_CLEANUP", "true") == "true",
 		RetentionDays:     7, // Default to 7 days
 		CleanupOnStartup:  getSecretValue("CLEANUP_ON_STARTUP", "false") == "true",
 	}
@@ -353,7 +353,7 @@ func getDefaultBackupConfig() *BackupConfig {
 		IncludeManagedFields:  false,
 		IncludeStatus:         false,
 		// Cleanup configuration defaults
-		EnableCleanup:         false,
+		EnableCleanup:         true,
 		RetentionDays:         7,
 		CleanupOnStartup:      false,
 	}

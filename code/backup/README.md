@@ -1,10 +1,10 @@
 # Backup Service
 
-Production-ready Kubernetes/OpenShift cluster backup service with enterprise-grade structured logging and comprehensive resource filtering.
+Production-ready Kubernetes/OpenShift cluster backup service with enterprise-grade structured logging, comprehensive resource filtering, and automatic backup retention management.
 
 ## 🎯 Overview
 
-The backup service is a Go-based application that runs as a CronJob in Kubernetes clusters to automatically backup cluster resources to MinIO object storage. It supports flexible resource filtering, OpenShift compatibility, and provides detailed operational metrics.
+The backup service is a Go-based application that runs as a CronJob in Kubernetes clusters to automatically backup cluster resources to MinIO object storage. It supports flexible resource filtering, OpenShift compatibility, automatic cleanup with configurable retention policies, and provides detailed operational metrics.
 
 ## 🏗 Architecture
 
@@ -64,6 +64,10 @@ type Config struct {
     BatchSize         int
     RetryAttempts     int
     RetryDelay        time.Duration
+    // Cleanup configuration
+    EnableCleanup     bool
+    RetentionDays     int
+    CleanupOnStartup  bool
 }
 ```
 
@@ -86,6 +90,10 @@ type BackupConfig struct {
     IncludeOpenShiftRes     bool
     ValidateYAML            bool
     SkipInvalidResources    bool
+    // Cleanup configuration
+    EnableCleanup           bool
+    RetentionDays           int
+    CleanupOnStartup        bool
 }
 ```
 
@@ -466,4 +474,83 @@ resources:
     memory: 1Gi
 ```
 
-This backup service provides a robust, scalable solution for multi-cluster Kubernetes backup with enterprise-grade monitoring and operational visibility.
+### 7. Cleanup & Retention Management
+
+**Automatic Cleanup System:**
+The backup service includes a comprehensive cleanup system to manage backup retention automatically:
+
+**Configuration:**
+```go
+type Config struct {
+    // ... other fields
+    EnableCleanup     bool          // Enable automatic cleanup (default: true)
+    RetentionDays     int           // Days to retain backups (default: 7)
+    CleanupOnStartup  bool          // Cleanup on startup vs after backup (default: false)
+}
+```
+
+**Cleanup Process:**
+1. **Retention Policy**: Automatically removes backups older than configured retention period
+2. **Storage Optimization**: Frees up MinIO storage space by removing outdated files
+3. **Cluster-Aware**: Only cleans up files belonging to the current cluster
+4. **Safe Operation**: Preserves recent backups and handles errors gracefully
+
+**Cleanup Operation Flow:**
+```go
+func (cb *ClusterBackup) performCleanup() error {
+    if !cb.backupConfig.EnableCleanup {
+        return nil // Skip if disabled
+    }
+    
+    cutoffTime := time.Now().AddDate(0, 0, -cb.backupConfig.RetentionDays)
+    prefix := fmt.Sprintf("clusterbackup/%s", cb.config.ClusterName)
+    
+    // List and remove old objects
+    objects := cb.minioClient.ListObjects(cb.ctx, cb.config.MinIOBucket, 
+        minio.ListObjectsOptions{Prefix: prefix})
+    
+    for object := range objects {
+        if object.LastModified.Before(cutoffTime) {
+            err := cb.minioClient.RemoveObject(cb.ctx, cb.config.MinIOBucket, 
+                object.Key, minio.RemoveObjectOptions{})
+            // Handle cleanup statistics and logging
+        }
+    }
+}
+```
+
+**Cleanup Configuration in Helm:**
+```yaml
+# values.yaml
+backup:
+  config:
+    enableCleanup: true      # Enable automatic cleanup
+    retentionDays: 7         # Retain backups for 7 days
+    cleanupOnStartup: false  # Cleanup after backup, not on startup
+```
+
+**Cleanup Logging:**
+```json
+{
+  "timestamp": "2025-07-13T10:15:30Z",
+  "level": "info",
+  "component": "backup",
+  "cluster": "production-east",
+  "operation": "cleanup_complete",
+  "message": "Cleanup completed successfully",
+  "data": {
+    "files_removed": 142,
+    "storage_freed_mb": 85.6,
+    "cutoff_date": "2025-07-06T10:15:30Z",
+    "duration_ms": 2341.5
+  }
+}
+```
+
+**Cleanup Monitoring:**
+- Tracks number of files removed
+- Monitors storage space freed
+- Logs cleanup duration and performance
+- Alerts on cleanup failures
+
+This backup service provides a robust, scalable solution for multi-cluster Kubernetes backup with enterprise-grade monitoring, automatic cleanup, and operational visibility.
