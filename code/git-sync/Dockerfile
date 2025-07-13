@@ -31,21 +31,24 @@ RUN microdnf update -y && \
     microdnf clean all && \
     rm -rf /var/cache/yum
 
-# Create non-root user
+# Create non-root user for OpenShift compatibility
 RUN useradd -r -u 1001 -g root -s /sbin/nologin git-sync-user
 
 # Copy binary from builder stage
 COPY --from=builder /workspace/git-sync /usr/local/bin/git-sync
 
-# Set proper permissions
+# Set proper permissions for OpenShift (group-writable, root group ownership)
 RUN chmod +x /usr/local/bin/git-sync && \
-    chown 1001:0 /usr/local/bin/git-sync
+    chown 1001:root /usr/local/bin/git-sync
 
-# Create necessary directories with proper permissions
-RUN mkdir -p /tmp /workspace /home/git-sync-user/.ssh && \
+# Create necessary directories with OpenShift-compatible permissions
+# OpenShift assigns random UIDs but always uses group 0 (root)
+RUN mkdir -p /tmp /workspace /data /home/git-sync-user/.ssh && \
     chmod 1777 /tmp && \
-    chown -R 1001:0 /workspace /home/git-sync-user && \
-    chmod 700 /home/git-sync-user/.ssh
+    chmod 775 /workspace /data && \
+    chmod 700 /home/git-sync-user/.ssh && \
+    chgrp -R root /workspace /data /home/git-sync-user && \
+    chmod -R g+rwX /workspace /data /home/git-sync-user
 
 # Security labels
 LABEL name="openshift-cluster-git-sync" \

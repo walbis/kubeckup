@@ -26,20 +26,23 @@ RUN microdnf update -y && \
     microdnf clean all && \
     rm -rf /var/cache/yum
 
-# Create non-root user
+# Create non-root user for OpenShift compatibility
 RUN useradd -r -u 1001 -g root -s /sbin/nologin backup-user
 
 # Copy binary from builder stage
 COPY --from=builder /workspace/cluster-backup /usr/local/bin/cluster-backup
 
-# Set proper permissions
+# Set proper permissions for OpenShift (group-writable, root group ownership)
 RUN chmod +x /usr/local/bin/cluster-backup && \
-    chown 1001:0 /usr/local/bin/cluster-backup
+    chown 1001:root /usr/local/bin/cluster-backup
 
-# Create necessary directories with proper permissions
-RUN mkdir -p /tmp /workspace && \
+# Create necessary directories with OpenShift-compatible permissions
+# OpenShift assigns random UIDs but always uses group 0 (root)
+RUN mkdir -p /tmp /workspace /data && \
     chmod 1777 /tmp && \
-    chown 1001:0 /workspace
+    chmod 775 /workspace /data && \
+    chgrp -R root /workspace /data && \
+    chmod -R g+rwX /workspace /data
 
 # Security labels
 LABEL name="openshift-cluster-backup" \
