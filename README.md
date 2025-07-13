@@ -82,6 +82,17 @@ kubectl apply -f k8s/monitoring/
 kubectl apply -f k8s/shared/
 ```
 
+### 5. OpenShift Deployment (Alternative)
+
+For OpenShift clusters using default ServiceAccount:
+
+```bash
+# Deploy OpenShift-specific manifests
+oc apply -f k8s/openshift/
+
+# See k8s/openshift/deployment-instructions.md for detailed guide
+```
+
 ## 📊 Enhanced Structured Logging
 
 ### Log Format
@@ -292,6 +303,21 @@ time() - cluster_backup_last_success_timestamp
     │   ├── git-sync-cronjob-central.yaml
     │   ├── git-sync-cronjob.yaml
     │   └── git-sync-secret.yaml
+    ├── helm/             # Helm chart for deployment automation
+    │   └── cluster-backup/
+    │       ├── Chart.yaml
+    │       ├── values.yaml
+    │       ├── templates/
+    │       └── examples/
+    ├── openshift/        # OpenShift-specific manifests (NEW)
+    │   ├── rbac-default-sa.yaml
+    │   ├── backup-cronjob-default-sa.yaml
+    │   ├── scc-backup.yaml
+    │   ├── configmap-openshift.yaml
+    │   ├── backup-secret-openshift.yaml
+    │   ├── namespace-backup-system.yaml
+    │   ├── monitoring-openshift.yaml
+    │   └── deployment-instructions.md
     ├── monitoring/       # Monitoring manifests
     │   ├── monitoring.yaml
     │   └── prometheus-monitoring.yaml

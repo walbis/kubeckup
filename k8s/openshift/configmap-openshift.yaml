@@ -1,0 +1,127 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-config
+  namespace: backup-system
+  labels:
+    app: cluster-backup
+    component: backup-service
+    platform: openshift
+  annotations:
+    description: "Configuration for OpenShift cluster backup service"
+data:
+  # Filtering configuration optimized for OpenShift
+  filtering-mode: "hybrid"
+  
+  # Resources to include (whitelist)
+  include-resources: |
+    deployments
+    services
+    configmaps
+    secrets
+    persistentvolumeclaims
+    routes
+    buildconfigs
+    imagestreams
+    deploymentconfigs
+  
+  # Resources to exclude (blacklist)
+  exclude-resources: |
+    events
+    nodes
+    endpoints
+    pods
+    replicasets
+  
+  # Namespaces to exclude (OpenShift system namespaces)
+  exclude-namespaces: |
+    openshift
+    openshift-apiserver
+    openshift-apiserver-operator
+    openshift-authentication
+    openshift-authentication-operator
+    openshift-cloud-controller-manager
+    openshift-cloud-controller-manager-operator
+    openshift-cloud-credential-operator
+    openshift-cluster-machine-approver
+    openshift-cluster-node-tuning-operator
+    openshift-cluster-samples-operator
+    openshift-cluster-storage-operator
+    openshift-cluster-version
+    openshift-config
+    openshift-config-managed
+    openshift-config-operator
+    openshift-console
+    openshift-console-operator
+    openshift-console-user-settings
+    openshift-controller-manager
+    openshift-controller-manager-operator
+    openshift-dns
+    openshift-dns-operator
+    openshift-etcd
+    openshift-etcd-operator
+    openshift-image-registry
+    openshift-infra
+    openshift-ingress
+    openshift-ingress-canary
+    openshift-ingress-operator
+    openshift-insights
+    openshift-kube-apiserver
+    openshift-kube-apiserver-operator
+    openshift-kube-controller-manager
+    openshift-kube-controller-manager-operator
+    openshift-kube-scheduler
+    openshift-kube-scheduler-operator
+    openshift-kube-storage-version-migrator
+    openshift-kube-storage-version-migrator-operator
+    openshift-machine-api
+    openshift-machine-config-operator
+    openshift-marketplace
+    openshift-monitoring
+    openshift-multus
+    openshift-network-diagnostics
+    openshift-network-operator
+    openshift-node
+    openshift-oauth-apiserver
+    openshift-operator-lifecycle-manager
+    openshift-operators
+    openshift-ovirt-infra
+    openshift-ovn-kubernetes
+    openshift-sdn
+    openshift-service-ca
+    openshift-service-ca-operator
+    openshift-user-workload-monitoring
+    kube-node-lease
+    kube-public
+    kube-system
+    default
+  
+  # OpenShift specific resources
+  include-openshift-resources: "true"
+  
+  # Custom Resource Definitions to include
+  include-crds: |
+    routes.route.openshift.io
+    buildconfigs.build.openshift.io
+    imagestreams.image.openshift.io
+    deploymentconfigs.apps.openshift.io
+    templates.template.openshift.io
+    workflows.argoproj.io
+    applications.argoproj.io
+  
+  # Advanced configuration
+  batch-size: "50"
+  retry-attempts: "3"
+  retry-delay: "5s"
+  log-level: "info"
+  max-resource-size: "10Mi"
+  include-managed-fields: "false"
+  include-status: "false"
+  validate-yaml: "true"
+  skip-invalid-resources: "true"
+  
+  # Cleanup configuration
+  enable-cleanup: "true"
+  retention-days: "7"
+  cleanup-on-startup: "false"

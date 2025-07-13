@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backup-system
+  labels:
+    app: cluster-backup
+    component: namespace
+    platform: openshift
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    security.openshift.io/scc.podSecurityLabelSync: "false"
+  annotations:
+    description: "Namespace for OpenShift cluster backup system"
+    openshift.io/description: "Production-ready cluster backup system with MinIO storage and Git synchronization"
+    openshift.io/display-name: "Cluster Backup System"
+    openshift.io/node-selector: ""
+    scheduler.alpha.kubernetes.io/node-selector: ""
