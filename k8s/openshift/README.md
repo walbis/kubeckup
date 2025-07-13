@@ -6,7 +6,7 @@ OpenShift için optimize edilmiş cluster backup sistemi. Default ServiceAccount
 
 - ✅ **Default ServiceAccount**: Özel SA gereksiz
 - ✅ **Minimal RBAC**: Tek wildcard kuralı (`apiGroups: ["*"], resources: ["*"], verbs: ["get", "list", "watch"]`)
-- ✅ **No Custom SCC**: OpenShift'in `restricted-v2` SCC'sini kullanır
+- ✅ **No SCC Required**: OpenShift'in `restricted-v2` SCC'si otomatik uygulanır
 - ✅ **Dockerfile Optimized**: Group permissions OpenShift uyumlu
 - ✅ **Production Ready**: 7-günlük otomatik cleanup
 
@@ -36,11 +36,10 @@ oc apply -f backup-cronjob-default-sa.yaml
 oc apply -f monitoring-openshift.yaml
 ```
 
-### Custom SCC ile Deployment (Enterprise)
+### Namespace + Monitoring ile Deployment (Opsiyonel)
 ```bash
-# Tüm dosyaları uygula
+# Özel namespace + monitoring ile
 oc apply -f namespace-backup-system.yaml
-oc apply -f scc-backup.yaml
 oc apply -f rbac-default-sa.yaml
 oc apply -f backup-secret-openshift.yaml
 oc apply -f configmap-openshift.yaml
@@ -57,7 +56,6 @@ oc apply -f monitoring-openshift.yaml
 | `backup-secret-openshift.yaml` | Konfigürasyon secrets | ✅ |
 | `configmap-openshift.yaml` | OpenShift resource filtering | ✅ |
 | `namespace-backup-system.yaml` | Namespace tanımı | ⚪ |
-| `scc-backup.yaml` | Custom SecurityContextConstraints | ⚪ |
 | `monitoring-openshift.yaml` | Prometheus monitoring | ⚪ |
 | `deployment-instructions.md` | Detaylı kurulum kılavuzu | 📖 |
 
