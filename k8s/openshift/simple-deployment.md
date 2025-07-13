@@ -69,10 +69,10 @@ RUN mkdir -p /tmp /workspace /data && \
 
 ### Minimal RBAC
 ```yaml
-# Sadece okuma izni - hepsi için
+# Sadece okuma izni - hepsi için (watch da dahil)
 - apiGroups: ["*"]
   resources: ["*"]
-  verbs: ["get", "list"]
+  verbs: ["get", "list", "watch"]
 ```
 
 ## 🎪 Test Et

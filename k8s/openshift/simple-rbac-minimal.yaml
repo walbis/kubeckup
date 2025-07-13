@@ -10,15 +10,10 @@ metadata:
     component: minimal-rbac
     platform: openshift
 rules:
-# Core Kubernetes resources - read only
-- apiGroups: [""]
-  resources: ["*"]
-  verbs: ["get", "list"]
-
-# All other API groups - read only
+# All API groups and resources - read only access
 - apiGroups: ["*"]
   resources: ["*"]
-  verbs: ["get", "list"]
+  verbs: ["get", "list", "watch"]
 ---
 # ClusterRoleBinding for default ServiceAccount in backup-system namespace
 apiVersion: rbac.authorization.k8s.io/v1
