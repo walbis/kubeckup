@@ -30,8 +30,7 @@ spec:
           annotations:
             openshift.io/scc: restricted-v2
         spec:
-          # Use default ServiceAccount instead of custom one
-          # serviceAccountName: default  # This is implicit, no need to specify
+          serviceAccountName: cluster-backup
           restartPolicy: OnFailure
           securityContext:
             runAsNonRoot: true

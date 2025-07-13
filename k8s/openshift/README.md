@@ -1,10 +1,10 @@
 # OpenShift Cluster Backup Deployment
 
-OpenShift için optimize edilmiş cluster backup sistemi. Default ServiceAccount kullanır ve minimal RBAC ile çalışır.
+OpenShift için optimize edilmiş cluster backup sistemi. Özel ServiceAccount ve minimal RBAC ile çalışır.
 
 ## 🎯 Özellikler
 
-- ✅ **Default ServiceAccount**: Özel SA gereksiz
+- ✅ **Dedicated ServiceAccount**: Temiz izolasyon için özel SA
 - ✅ **Minimal RBAC**: Tek wildcard kuralı (`apiGroups: ["*"], resources: ["*"], verbs: ["get", "list", "watch"]`)
 - ✅ **No SCC Required**: OpenShift'in `restricted-v2` SCC'si otomatik uygulanır
 - ✅ **Dockerfile Optimized**: Group permissions OpenShift uyumlu
@@ -51,7 +51,7 @@ oc apply -f monitoring-openshift.yaml
 
 | Dosya | Açıklama | Gerekli |
 |-------|----------|---------|
-| `rbac-default-sa.yaml` | Minimal RBAC (wildcard permissions) | ✅ |
+| `rbac-default-sa.yaml` | ServiceAccount + Minimal RBAC | ✅ |
 | `backup-cronjob-default-sa.yaml` | Ana backup CronJob | ✅ |
 | `backup-secret-openshift.yaml` | Konfigürasyon secrets | ✅ |
 | `configmap-openshift.yaml` | OpenShift resource filtering | ✅ |

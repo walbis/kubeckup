@@ -1,10 +1,22 @@
 ---
-# OpenShift ClusterRole for default ServiceAccount
-# This allows the backup system to work with OpenShift's default ServiceAccount
+# ServiceAccount for cluster backup
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-backup
+  namespace: backup-system
+  labels:
+    app: cluster-backup
+    component: backup-service
+    platform: openshift
+  annotations:
+    description: "ServiceAccount for OpenShift cluster backup operations"
+---
+# ClusterRole for backup operations  
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: cluster-backup-default-sa-reader
+  name: cluster-backup-reader
   labels:
     app: cluster-backup
     component: backup-service
@@ -15,20 +27,20 @@ rules:
   resources: ["*"]
   verbs: ["get", "list", "watch"]
 ---
-# ClusterRoleBinding for default ServiceAccount in backup-system namespace
+# ClusterRoleBinding for backup ServiceAccount
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: cluster-backup-default-sa-binding
+  name: cluster-backup-binding
   labels:
     app: cluster-backup
     component: backup-service
     platform: openshift
 subjects:
 - kind: ServiceAccount
-  name: default
+  name: cluster-backup
   namespace: backup-system
 roleRef:
   kind: ClusterRole
-  name: cluster-backup-default-sa-reader
+  name: cluster-backup-reader
   apiGroup: rbac.authorization.k8s.io
