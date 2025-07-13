@@ -1,0 +1,96 @@
+🎉 OpenShift Cluster Backup has been deployed!
+
+📋 Deployment Summary:
+- Release name: {{ .Release.Name }}
+- Namespace: {{ include "cluster-backup-openshift.namespace" . }}
+- Cluster: {{ .Values.cluster.name }}
+- Chart version: {{ .Chart.Version }}
+
+🔧 Services Deployed:
+{{- if .Values.backup.enabled }}
+✅ Backup Service:
+   - Schedule: {{ .Values.backup.schedule }}
+   - Filtering mode: {{ .Values.backup.filtering.mode }}
+   - Cleanup enabled: {{ .Values.backup.config.enableCleanup }}
+   - Retention: {{ .Values.backup.config.retentionDays }} days
+{{- end }}
+
+{{- if and .Values.gitSync.enabled .Values.git.enabled }}
+✅ Git-Sync Service:
+   - Schedule: {{ .Values.gitSync.schedule }}
+   - Repository: {{ .Values.git.repository }}
+   - Branch: {{ .Values.git.branch }}
+{{- end }}
+
+{{- if .Values.monitoring.enabled }}
+✅ Monitoring:
+   - ServiceMonitor: {{ .Values.monitoring.serviceMonitor.enabled }}
+   - PrometheusRule: {{ .Values.monitoring.prometheusRule.enabled }}
+   - Metrics port: {{ .Values.monitoring.service.port }}
+{{- end }}
+
+📊 Check Status:
+# View backup CronJob status
+oc get cronjob {{ include "cluster-backup-openshift.fullname" . }}-backup -n {{ include "cluster-backup-openshift.namespace" . }}
+
+# View recent backup jobs
+oc get jobs -l app.kubernetes.io/component=backup -n {{ include "cluster-backup-openshift.namespace" . }}
+
+# Check backup logs
+oc logs -l app.kubernetes.io/component=backup -n {{ include "cluster-backup-openshift.namespace" . }}
+
+{{- if and .Values.gitSync.enabled .Values.git.enabled }}
+# View git-sync job status
+oc get jobs -l app.kubernetes.io/component=git-sync -n {{ include "cluster-backup-openshift.namespace" . }}
+
+# Check git-sync logs
+oc logs -l app.kubernetes.io/component=git-sync -n {{ include "cluster-backup-openshift.namespace" . }}
+{{- end }}
+
+{{- if .Values.monitoring.enabled }}
+🔍 Metrics Access:
+# Port-forward to access metrics locally
+oc port-forward service/{{ include "cluster-backup-openshift.fullname" . }}-backup-metrics {{ .Values.monitoring.service.port }}:{{ .Values.monitoring.service.port }} -n {{ include "cluster-backup-openshift.namespace" . }}
+
+# Then access metrics at: http://localhost:{{ .Values.monitoring.service.port }}/metrics
+{{- end }}
+
+{{- if .Values.routes.enabled }}
+🌐 OpenShift Routes:
+{{- if .Values.routes.backup.enabled }}
+- Backup metrics: {{ if .Values.routes.backup.host }}https://{{ .Values.routes.backup.host }}{{ else }}[Auto-generated route]{{ end }}
+{{- end }}
+{{- if and .Values.routes.gitSync.enabled .Values.gitSync.enabled }}
+- Git-sync metrics: {{ if .Values.routes.gitSync.host }}https://{{ .Values.routes.gitSync.host }}{{ else }}[Auto-generated route]{{ end }}
+{{- end }}
+{{- end }}
+
+🧪 Manual Testing:
+# Trigger a manual backup job
+oc create job manual-backup-$(date +%s) --from=cronjob/{{ include "cluster-backup-openshift.fullname" . }}-backup -n {{ include "cluster-backup-openshift.namespace" . }}
+
+{{- if and .Values.gitSync.enabled .Values.git.enabled }}
+# Trigger a manual git-sync job
+oc create job manual-git-sync-$(date +%s) --from=cronjob/{{ include "cluster-backup-openshift.fullname" . }}-git-sync -n {{ include "cluster-backup-openshift.namespace" . }}
+{{- end }}
+
+📁 MinIO Storage Structure:
+Your backups will be stored in MinIO at:
+{{ .Values.minio.bucket }}/clusterbackup/{{ .Values.cluster.name }}/
+
+{{- if .Values.git.enabled }}
+🔄 Git Repository:
+Backups will be synchronized to: {{ .Values.git.repository }}
+{{- end }}
+
+⚠️  Important Notes:
+- Ensure MinIO credentials are correct in the secret
+- Verify RBAC permissions are properly applied
+- Check that OpenShift SCC allows the backup operations
+- Monitor the first few backup runs for any issues
+
+📖 For more information:
+- Documentation: https://github.com/walbis/kubeckup
+- Issues: https://github.com/walbis/kubeckup/issues
+
+Happy backing up! 🚀

@@ -1,0 +1,73 @@
+# Multi-Cluster Remote OpenShift Configuration
+# Deploy this on remote clusters (backup only, no git-sync)
+
+cluster:
+  name: "openshift-remote-1"  # Update for each remote cluster
+
+minio:
+  endpoint: "minio.apps.openshift.example.com"
+  bucket: "multi-cluster-backups"  # Same bucket as central
+  credentials:
+    accessKey: "remote-access-key"
+    secretKey: "remote-secret-key"
+
+# Git configuration (same as central for consistency)
+git:
+  enabled: true
+  repository: "https://github.com/your-org/multi-cluster-backups.git"
+  branch: "main"
+  user:
+    name: "multi-cluster-backup-bot"
+    email: "backup@yourcompany.com"
+  auth:
+    token: "ghp_your_github_token"
+
+# Backup configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Same time as central
+  
+  filtering:
+    mode: "hybrid"
+    includeNamespaces:
+      - production
+      - staging
+      - shared-services
+  
+  config:
+    enableCleanup: true
+    retentionDays: 14
+    logLevel: "info"
+
+# DISABLE git-sync on remote clusters
+gitSync:
+  enabled: false
+
+# Basic monitoring for remote cluster
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    labels:
+      cluster-role: "remote"
+  prometheusRule:
+    enabled: true
+    rules:
+      backupFailure: true
+      backupNotRunning: true
+      gitSyncFailure: false  # No git-sync on remote
+      highBackupDuration: true
+
+# Optional routes for remote monitoring
+routes:
+  enabled: false  # Disable by default, enable if needed
+
+# Standard storage for remote cluster
+persistence:
+  enabled: true
+  backupSize: 2Gi
+
+extra:
+  labels:
+    cluster-role: "remote"
+    backup-coordination: "disabled"

@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cluster-backup-openshift.configMapName" . }}
+  namespace: {{ include "cluster-backup-openshift.namespace" . }}
+  labels:
+    {{- include "cluster-backup-openshift.backupLabels" . | nindent 4 }}
+  annotations:
+    description: "Configuration for OpenShift cluster backup service"
+data:
+  # Filtering configuration optimized for OpenShift
+  filtering-mode: {{ .Values.backup.filtering.mode | quote }}
+  
+  # Resources to include (whitelist)
+  {{- if .Values.backup.filtering.includeResources }}
+  include-resources: |
+    {{- range .Values.backup.filtering.includeResources }}
+    {{ . }}
+    {{- end }}
+  {{- end }}
+  
+  # Resources to exclude (blacklist)
+  {{- if .Values.backup.filtering.excludeResources }}
+  exclude-resources: |
+    {{- range .Values.backup.filtering.excludeResources }}
+    {{ . }}
+    {{- end }}
+  {{- end }}
+  
+  # Namespaces to include
+  {{- if .Values.backup.filtering.includeNamespaces }}
+  include-namespaces: |
+    {{- range .Values.backup.filtering.includeNamespaces }}
+    {{ . }}
+    {{- end }}
+  {{- end }}
+  
+  # Namespaces to exclude (OpenShift system namespaces)
+  {{- if .Values.backup.filtering.excludeNamespaces }}
+  exclude-namespaces: |
+    {{- range .Values.backup.filtering.excludeNamespaces }}
+    {{ . }}
+    {{- end }}
+    {{- range .Values.backup.config.additionalExcludeNamespaces }}
+    {{ . }}
+    {{- end }}
+  {{- end }}
+  
+  # OpenShift specific resources
+  include-openshift-resources: {{ .Values.backup.filtering.includeOpenShiftResources | quote }}
+  
+  # Custom Resource Definitions to include
+  {{- if .Values.backup.filtering.includeCRDs }}
+  include-crds: |
+    {{- range .Values.backup.filtering.includeCRDs }}
+    {{ . }}
+    {{- end }}
+  {{- end }}
+  
+  # Advanced configuration
+  batch-size: {{ .Values.backup.config.batchSize | quote }}
+  retry-attempts: {{ .Values.backup.config.retryAttempts | quote }}
+  retry-delay: {{ .Values.backup.config.retryDelay | quote }}
+  log-level: {{ .Values.backup.config.logLevel | quote }}
+  max-resource-size: {{ .Values.backup.config.maxResourceSize | quote }}
+  include-managed-fields: {{ .Values.backup.config.includeManagedFields | quote }}
+  include-status: {{ .Values.backup.config.includeStatus | quote }}
+  validate-yaml: {{ .Values.backup.config.validateYAML | quote }}
+  skip-invalid-resources: {{ .Values.backup.config.skipInvalidResources | quote }}
+  
+  # Cleanup configuration
+  enable-cleanup: {{ .Values.backup.config.enableCleanup | quote }}
+  retention-days: {{ .Values.backup.config.retentionDays | quote }}
+  cleanup-on-startup: {{ .Values.backup.config.cleanupOnStartup | quote }}

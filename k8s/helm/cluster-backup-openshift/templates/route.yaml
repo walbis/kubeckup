@@ -1,0 +1,53 @@
+{{- if and .Values.routes.enabled .Values.routes.backup.enabled }}
+---
+# OpenShift Route for backup metrics
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "cluster-backup-openshift.fullname" . }}-backup-metrics
+  namespace: {{ include "cluster-backup-openshift.namespace" . }}
+  labels:
+    {{- include "cluster-backup-openshift.backupLabels" . | nindent 4 }}
+  annotations:
+    description: "OpenShift route for backup metrics access"
+spec:
+  {{- if .Values.routes.backup.host }}
+  host: {{ .Values.routes.backup.host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "cluster-backup-openshift.fullname" . }}-backup-metrics
+  port:
+    targetPort: metrics
+  {{- with .Values.routes.backup.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+
+{{- if and .Values.routes.enabled .Values.routes.gitSync.enabled .Values.gitSync.enabled }}
+---
+# OpenShift Route for git-sync metrics
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "cluster-backup-openshift.fullname" . }}-git-sync-metrics
+  namespace: {{ include "cluster-backup-openshift.namespace" . }}
+  labels:
+    {{- include "cluster-backup-openshift.gitSyncLabels" . | nindent 4 }}
+  annotations:
+    description: "OpenShift route for git-sync metrics access"
+spec:
+  {{- if .Values.routes.gitSync.host }}
+  host: {{ .Values.routes.gitSync.host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "cluster-backup-openshift.fullname" . }}-git-sync-metrics
+  port:
+    targetPort: metrics
+  {{- with .Values.routes.gitSync.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

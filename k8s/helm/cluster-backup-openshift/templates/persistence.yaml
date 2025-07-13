@@ -1,0 +1,44 @@
+{{- if .Values.persistence.enabled }}
+---
+# Backup Persistent Volume Claim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "cluster-backup-openshift.fullname" . }}-backup-pvc
+  namespace: {{ include "cluster-backup-openshift.namespace" . }}
+  labels:
+    {{- include "cluster-backup-openshift.backupLabels" . | nindent 4 }}
+  annotations:
+    description: "Persistent storage for backup working directory"
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.backupSize }}
+{{- if .Values.gitSync.enabled }}
+---
+# Git-Sync Persistent Volume Claim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "cluster-backup-openshift.fullname" . }}-git-sync-pvc
+  namespace: {{ include "cluster-backup-openshift.namespace" . }}
+  labels:
+    {{- include "cluster-backup-openshift.gitSyncLabels" . | nindent 4 }}
+  annotations:
+    description: "Persistent storage for git-sync working directory"
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.gitSyncSize }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,178 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "cluster-backup-openshift.fullname" . }}-backup
+  namespace: {{ include "cluster-backup-openshift.namespace" . }}
+  labels:
+    {{- include "cluster-backup-openshift.backupLabels" . | nindent 4 }}
+  annotations:
+    description: "OpenShift cluster backup job"
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 7200  # 2 hours timeout
+      template:
+        metadata:
+          labels:
+            {{- include "cluster-backup-openshift.backupSelectorLabels" . | nindent 12 }}
+          annotations:
+            openshift.io/scc: restricted-v2
+        spec:
+          serviceAccountName: {{ include "cluster-backup-openshift.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          {{- with .Values.security.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+          - name: backup
+            image: {{ include "cluster-backup-openshift.backupImage" . }}
+            imagePullPolicy: {{ .Values.image.backup.pullPolicy }}
+            env:
+            # Cluster Configuration
+            - name: CLUSTER_DOMAIN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: cluster-domain
+            - name: CLUSTER_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: cluster-name
+            
+            # MinIO Configuration
+            - name: MINIO_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: minio-endpoint
+            - name: MINIO_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: minio-bucket
+            - name: MINIO_USE_SSL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: minio-use-ssl
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: minio-access-key
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: minio-secret-key
+            
+            # Configuration
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: LOG_LEVEL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: log-level
+            
+            # Cleanup Configuration
+            - name: ENABLE_CLEANUP
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: enable-cleanup
+            - name: RETENTION_DAYS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: retention-days
+            - name: CLEANUP_ON_STARTUP
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: cleanup-on-startup
+            
+            {{- with .Values.extra.backupEnvVars }}
+            {{- range $key, $value := . }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            
+            {{- with .Values.backup.resources }}
+            resources:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            
+            {{- with .Values.security.securityContext }}
+            securityContext:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            
+            volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: workspace
+              mountPath: /workspace
+            {{- if .Values.persistence.enabled }}
+            - name: backup-storage
+              mountPath: /data
+            {{- end }}
+            
+            ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+              
+            readinessProbe:
+              httpGet:
+                path: /metrics
+                port: metrics
+              initialDelaySeconds: 5
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 3
+              
+          volumes:
+          - name: tmp
+            emptyDir: {}
+          - name: workspace
+            emptyDir: {}
+          {{- if .Values.persistence.enabled }}
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: {{ include "cluster-backup-openshift.fullname" . }}-backup-pvc
+          {{- end }}
+          
+          {{- with .Values.backup.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          
+          {{- with .Values.backup.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          
+          {{- with .Values.backup.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          
+          {{- with .Values.global.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

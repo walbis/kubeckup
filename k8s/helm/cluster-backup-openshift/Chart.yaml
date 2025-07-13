@@ -1,0 +1,26 @@
+apiVersion: v2
+name: cluster-backup-openshift
+description: Production-ready OpenShift cluster backup system with MinIO storage and Git synchronization
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/walbis/kubeckup
+sources:
+  - https://github.com/walbis/kubeckup
+maintainers:
+  - name: OpenShift Backup Team
+    email: backup@yourcompany.com
+keywords:
+  - openshift
+  - backup
+  - kubernetes
+  - minio
+  - git
+  - cluster
+annotations:
+  category: Infrastructure
+  openshift.io/display-name: "OpenShift Cluster Backup"
+  openshift.io/provider-display-name: "Backup Team"
+  openshift.io/description: "Automated backup solution for OpenShift clusters with MinIO storage and Git version control"
+  openshift.io/tags: "backup,openshift,minio,git"
+  openshift.io/support-url: "https://github.com/walbis/kubeckup/issues"

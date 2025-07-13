@@ -1,0 +1,97 @@
+# Multi-Cluster Central OpenShift Configuration
+# Deploy this on the central cluster that runs git-sync
+
+cluster:
+  name: "openshift-central"
+
+minio:
+  endpoint: "minio.apps.openshift.example.com"
+  bucket: "multi-cluster-backups"
+  credentials:
+    accessKey: "central-access-key"
+    secretKey: "central-secret-key"
+
+# Git configuration for central sync
+git:
+  enabled: true
+  repository: "https://github.com/your-org/multi-cluster-backups.git"
+  branch: "main"
+  user:
+    name: "multi-cluster-backup-bot"
+    email: "backup@yourcompany.com"
+  auth:
+    token: "ghp_your_github_token"
+
+# Backup configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"
+  
+  filtering:
+    mode: "hybrid"
+    includeNamespaces:
+      - production
+      - staging
+      - shared-services
+  
+  config:
+    enableCleanup: true
+    retentionDays: 14
+    logLevel: "info"
+
+# ENABLE git-sync on central cluster
+gitSync:
+  enabled: true
+  schedule: "0 3 * * *"  # After backup completes
+  
+  config:
+    logLevel: "info"
+  
+  # Higher resources for multi-cluster sync
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# Enhanced monitoring for central cluster
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    labels:
+      cluster-role: "central"
+  prometheusRule:
+    enabled: true
+    rules:
+      backupFailure: true
+      backupNotRunning: true
+      gitSyncFailure: true
+      highBackupDuration: true
+
+# Routes for central monitoring
+routes:
+  enabled: true
+  backup:
+    enabled: true
+    host: "central-backup-metrics.apps.openshift.example.com"
+    tls:
+      termination: edge
+  gitSync:
+    enabled: true
+    host: "central-git-sync-metrics.apps.openshift.example.com"
+    tls:
+      termination: edge
+
+# Larger storage for central cluster
+persistence:
+  enabled: true
+  backupSize: 5Gi
+  gitSyncSize: 10Gi
+
+extra:
+  labels:
+    cluster-role: "central"
+    backup-coordination: "enabled"

@@ -1,0 +1,39 @@
+# Simple OpenShift Cluster Backup Configuration
+# Minimal configuration for quick setup
+
+# REQUIRED: Update these values
+cluster:
+  name: "my-openshift-cluster"
+
+minio:
+  endpoint: "minio.apps.my-openshift.com"
+  credentials:
+    accessKey: "your-access-key"
+    secretKey: "your-secret-key"
+
+# Basic backup configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  
+  config:
+    # Simple cleanup - 7 days retention
+    enableCleanup: true
+    retentionDays: 7
+    logLevel: "info"
+
+# Disable git-sync for simple setup
+gitSync:
+  enabled: false
+
+# Basic monitoring
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+  prometheusRule:
+    enabled: true
+
+# No external routes by default
+routes:
+  enabled: false

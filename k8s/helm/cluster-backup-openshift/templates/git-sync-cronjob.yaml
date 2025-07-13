@@ -1,0 +1,175 @@
+{{- if and .Values.gitSync.enabled .Values.git.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "cluster-backup-openshift.fullname" . }}-git-sync
+  namespace: {{ include "cluster-backup-openshift.namespace" . }}
+  labels:
+    {{- include "cluster-backup-openshift.gitSyncLabels" . | nindent 4 }}
+  annotations:
+    description: "OpenShift cluster backup git synchronization job"
+spec:
+  schedule: {{ .Values.gitSync.schedule | quote }}
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 3600  # 1 hour timeout
+      template:
+        metadata:
+          labels:
+            {{- include "cluster-backup-openshift.gitSyncSelectorLabels" . | nindent 12 }}
+          annotations:
+            openshift.io/scc: restricted-v2
+        spec:
+          serviceAccountName: {{ include "cluster-backup-openshift.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          {{- with .Values.security.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+          - name: git-sync
+            image: {{ include "cluster-backup-openshift.gitSyncImage" . }}
+            imagePullPolicy: {{ .Values.image.gitSync.pullPolicy }}
+            env:
+            # MinIO Configuration
+            - name: MINIO_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: minio-endpoint
+            - name: MINIO_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: minio-bucket
+            - name: MINIO_USE_SSL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: minio-use-ssl
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: minio-access-key
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: minio-secret-key
+            
+            # Git Configuration
+            - name: GIT_REPOSITORY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: git-repository
+            - name: GIT_BRANCH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: git-branch
+            - name: GIT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: git-username
+            - name: GIT_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: git-email
+            {{- if .Values.git.auth.token }}
+            - name: GIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: git-token
+            {{- end }}
+            {{- if .Values.git.auth.sshPrivateKey }}
+            - name: GIT_SSH_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cluster-backup-openshift.secretName" . }}
+                  key: git-ssh-private-key
+            {{- end }}
+            
+            # Configuration
+            - name: WORK_DIR
+              value: {{ .Values.gitSync.workDir | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.gitSync.config.logLevel | quote }}
+            - name: RETRY_ATTEMPTS
+              value: {{ .Values.gitSync.config.retryAttempts | quote }}
+            - name: RETRY_DELAY
+              value: {{ .Values.gitSync.config.retryDelay | quote }}
+            
+            {{- with .Values.extra.gitSyncEnvVars }}
+            {{- range $key, $value := . }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            
+            {{- with .Values.gitSync.resources }}
+            resources:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            
+            {{- with .Values.security.securityContext }}
+            securityContext:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            
+            volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: workspace
+              mountPath: /workspace
+            {{- if .Values.persistence.enabled }}
+            - name: git-sync-storage
+              mountPath: /data
+            {{- end }}
+            
+            ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+              
+          volumes:
+          - name: tmp
+            emptyDir: {}
+          - name: workspace
+            emptyDir: {}
+          {{- if .Values.persistence.enabled }}
+          - name: git-sync-storage
+            persistentVolumeClaim:
+              claimName: {{ include "cluster-backup-openshift.fullname" . }}-git-sync-pvc
+          {{- end }}
+          
+          {{- with .Values.gitSync.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          
+          {{- with .Values.gitSync.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          
+          {{- with .Values.gitSync.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          
+          {{- with .Values.global.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

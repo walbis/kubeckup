@@ -1,0 +1,218 @@
+# Production OpenShift Cluster Backup Configuration
+# This is a complete example for production deployment
+
+# Cluster configuration
+cluster:
+  name: "production-openshift"
+  domain: "cluster.local"
+
+# Container images - use your registry
+image:
+  backup:
+    registry: "quay.io"
+    repository: "your-org/cluster-backup"
+    tag: "latest"
+    pullPolicy: Always
+  gitSync:
+    registry: "quay.io"
+    repository: "your-org/git-sync"
+    tag: "latest"
+    pullPolicy: Always
+
+# MinIO configuration
+minio:
+  endpoint: "minio.apps.openshift.example.com"
+  bucket: "openshift-production-backups"
+  useSSL: true
+  credentials:
+    accessKey: "prod-backup-access-key"
+    secretKey: "prod-backup-secret-key"
+
+# Git configuration for version control
+git:
+  enabled: true
+  repository: "https://github.com/your-org/openshift-backups.git"
+  branch: "main"
+  user:
+    name: "openshift-backup-bot"
+    email: "backup@yourcompany.com"
+  auth:
+    token: "ghp_your_production_github_token"
+
+# Backup service configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  
+  # Production filtering - include important resources
+  filtering:
+    mode: "hybrid"
+    includeResources:
+      - deployments
+      - services
+      - configmaps
+      - secrets
+      - persistentvolumeclaims
+      - routes
+      - buildconfigs
+      - imagestreams
+      - deploymentconfigs
+      - templates
+    excludeResources:
+      - events
+      - nodes
+      - endpoints
+      - pods
+      - replicasets
+    
+    # Include production namespaces only
+    includeNamespaces:
+      - production
+      - staging
+      - shared-services
+    
+    # OpenShift resources
+    includeOpenShiftResources: true
+    includeCRDs:
+      - routes.route.openshift.io
+      - buildconfigs.build.openshift.io
+      - imagestreams.image.openshift.io
+      - deploymentconfigs.apps.openshift.io
+      - templates.template.openshift.io
+      - workflows.argoproj.io
+      - applications.argoproj.io
+  
+  # Production configuration
+  config:
+    batchSize: 100
+    retryAttempts: 5
+    retryDelay: "10s"
+    logLevel: "info"
+    maxResourceSize: "50Mi"
+    includeManagedFields: false
+    includeStatus: false
+    validateYAML: true
+    skipInvalidResources: true
+    
+    # Cleanup - keep backups for 30 days in production
+    enableCleanup: true
+    retentionDays: 30
+    cleanupOnStartup: false
+  
+  # Production resource limits
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  
+  # Prefer worker nodes
+  nodeSelector:
+    kubernetes.io/os: linux
+    node-role.kubernetes.io/worker: ""
+  
+  # Tolerate node taints
+  tolerations:
+  - key: "backup-workload"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+# Git-sync (enable only on central cluster)
+gitSync:
+  enabled: true
+  schedule: "0 3 * * *"  # 1 hour after backup
+  
+  config:
+    retryAttempts: 5
+    retryDelay: "10s"
+    logLevel: "info"
+  
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  
+  nodeSelector:
+    kubernetes.io/os: linux
+    node-role.kubernetes.io/worker: ""
+
+# Production monitoring
+monitoring:
+  enabled: true
+  
+  serviceMonitor:
+    enabled: true
+    labels:
+      monitoring: "enabled"
+    interval: 30s
+    scrapeTimeout: 10s
+  
+  prometheusRule:
+    enabled: true
+    labels:
+      monitoring: "enabled"
+    rules:
+      backupFailure: true
+      backupNotRunning: true
+      gitSyncFailure: true
+      highBackupDuration: true
+  
+  service:
+    type: ClusterIP
+    port: 8080
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+
+# OpenShift Routes for external access
+routes:
+  enabled: true
+  backup:
+    enabled: true
+    host: "backup-metrics.apps.openshift.example.com"
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+  gitSync:
+    enabled: true
+    host: "git-sync-metrics.apps.openshift.example.com"
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+
+# Production storage
+persistence:
+  enabled: true
+  storageClass: "fast-ssd"
+  accessMode: ReadWriteOnce
+  backupSize: 10Gi
+  gitSyncSize: 20Gi
+
+# Production security
+security:
+  podSecurityContext:
+    runAsNonRoot: true
+    fsGroup: 1001
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+
+# Additional labels for production
+extra:
+  labels:
+    environment: "production"
+    team: "platform"
+    criticality: "high"
+  annotations:
+    contact: "platform-team@yourcompany.com"
+    runbook: "https://wiki.yourcompany.com/backup-runbook"

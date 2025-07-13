@@ -1,0 +1,408 @@
+# Default values for cluster-backup-openshift
+# This is a YAML-formatted file optimized for OpenShift
+
+# Global configuration
+global:
+  # Image registry settings
+  imageRegistry: ""
+  imagePullSecrets: []
+  # Namespace override
+  namespaceOverride: ""
+
+# OpenShift cluster configuration
+cluster:
+  # Unique OpenShift cluster identifier (REQUIRED)
+  name: "my-openshift-cluster"
+  # Cluster domain
+  domain: "cluster.local"
+
+# Container image configuration
+image:
+  backup:
+    registry: registry.redhat.io
+    repository: openshift/cluster-backup
+    tag: "latest"
+    pullPolicy: Always
+  gitSync:
+    registry: registry.redhat.io
+    repository: openshift/git-sync
+    tag: "latest"
+    pullPolicy: Always
+
+# MinIO configuration
+minio:
+  # MinIO server endpoint (REQUIRED)
+  endpoint: "minio.apps.my-openshift.com"
+  # MinIO bucket name
+  bucket: "openshift-cluster-backups"
+  # Use SSL/TLS for MinIO connection
+  useSSL: true
+  # MinIO credentials (REQUIRED)
+  credentials:
+    # Access key for MinIO
+    accessKey: "your-minio-access-key"
+    # Secret key for MinIO
+    secretKey: "your-minio-secret-key"
+
+# Git configuration (for git-sync service)
+git:
+  # Enable git synchronization
+  enabled: true
+  # Git repository URL (REQUIRED if git.enabled=true)
+  repository: "https://github.com/your-org/openshift-backups.git"
+  # Git branch
+  branch: "main"
+  # Git user configuration
+  user:
+    name: "openshift-backup-bot"
+    email: "backup@yourcompany.com"
+  # Git authentication
+  auth:
+    # GitHub/GitLab token (REQUIRED if git.enabled=true)
+    token: "ghp_your_github_token_here"
+    # SSH private key (alternative to token)
+    sshPrivateKey: ""
+
+# Backup service configuration
+backup:
+  # Enable backup service
+  enabled: true
+  # Backup schedule (cron format)
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  
+  # OpenShift resource filtering configuration
+  filtering:
+    # Filtering mode: whitelist, blacklist, or hybrid
+    mode: "hybrid"
+    
+    # Resources to include (whitelist/hybrid mode)
+    includeResources:
+      - deployments
+      - services
+      - configmaps
+      - secrets
+      - persistentvolumeclaims
+      - routes                    # OpenShift specific
+      - buildconfigs              # OpenShift specific
+      - imagestreams              # OpenShift specific
+      - deploymentconfigs         # OpenShift specific
+    
+    # Resources to exclude (blacklist/hybrid mode)
+    excludeResources:
+      - events
+      - nodes
+      - endpoints
+      - pods
+      - replicasets
+    
+    # Namespaces to include (empty = all except excluded)
+    includeNamespaces: []
+    
+    # OpenShift namespaces to exclude
+    excludeNamespaces:
+      - openshift
+      - openshift-apiserver
+      - openshift-apiserver-operator
+      - openshift-authentication
+      - openshift-authentication-operator
+      - openshift-cloud-controller-manager
+      - openshift-cloud-controller-manager-operator
+      - openshift-cloud-credential-operator
+      - openshift-cluster-machine-approver
+      - openshift-cluster-node-tuning-operator
+      - openshift-cluster-samples-operator
+      - openshift-cluster-storage-operator
+      - openshift-cluster-version
+      - openshift-config
+      - openshift-config-managed
+      - openshift-config-operator
+      - openshift-console
+      - openshift-console-operator
+      - openshift-console-user-settings
+      - openshift-controller-manager
+      - openshift-controller-manager-operator
+      - openshift-dns
+      - openshift-dns-operator
+      - openshift-etcd
+      - openshift-etcd-operator
+      - openshift-image-registry
+      - openshift-infra
+      - openshift-ingress
+      - openshift-ingress-canary
+      - openshift-ingress-operator
+      - openshift-insights
+      - openshift-kube-apiserver
+      - openshift-kube-apiserver-operator
+      - openshift-kube-controller-manager
+      - openshift-kube-controller-manager-operator
+      - openshift-kube-scheduler
+      - openshift-kube-scheduler-operator
+      - openshift-kube-storage-version-migrator
+      - openshift-kube-storage-version-migrator-operator
+      - openshift-machine-api
+      - openshift-machine-config-operator
+      - openshift-marketplace
+      - openshift-monitoring
+      - openshift-multus
+      - openshift-network-diagnostics
+      - openshift-network-operator
+      - openshift-node
+      - openshift-oauth-apiserver
+      - openshift-operator-lifecycle-manager
+      - openshift-operators
+      - openshift-ovirt-infra
+      - openshift-ovn-kubernetes
+      - openshift-sdn
+      - openshift-service-ca
+      - openshift-service-ca-operator
+      - openshift-user-workload-monitoring
+      - kube-node-lease
+      - kube-public
+      - kube-system
+      - default
+    
+    # Include OpenShift-specific resources
+    includeOpenShiftResources: true
+    
+    # Custom Resource Definitions to include
+    includeCRDs:
+      - routes.route.openshift.io
+      - buildconfigs.build.openshift.io
+      - imagestreams.image.openshift.io
+      - deploymentconfigs.apps.openshift.io
+      - templates.template.openshift.io
+      - workflows.argoproj.io
+      - applications.argoproj.io
+  
+  # Advanced backup configuration
+  config:
+    # Batch size for processing
+    batchSize: 50
+    # Retry attempts for failed operations
+    retryAttempts: 3
+    # Retry delay between attempts
+    retryDelay: "5s"
+    # Log level (debug, info, warn, error)
+    logLevel: "info"
+    # Maximum resource size to backup
+    maxResourceSize: "10Mi"
+    # Include managed fields in YAML
+    includeManagedFields: false
+    # Include status in YAML
+    includeStatus: false
+    # Validate YAML before upload
+    validateYAML: true
+    # Skip invalid resources
+    skipInvalidResources: true
+    # Additional exclude namespaces
+    additionalExcludeNamespaces: []
+    
+    # Cleanup configuration
+    enableCleanup: true
+    retentionDays: 7
+    cleanupOnStartup: false
+  
+  # Resource limits and requests
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  
+  # Node selector (OpenShift specific)
+  nodeSelector:
+    kubernetes.io/os: linux
+  
+  # Tolerations
+  tolerations: []
+  
+  # Affinity (prefer worker nodes)
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+          - key: node-role.kubernetes.io/worker
+            operator: Exists
+      - weight: 50
+        preference:
+          matchExpressions:
+          - key: node-role.kubernetes.io/compute
+            operator: Exists
+
+# Git-sync service configuration
+gitSync:
+  # Enable git-sync service (should be enabled on only one cluster)
+  enabled: false
+  # Git-sync schedule (cron format)
+  schedule: "0 3 * * *"  # Daily at 3 AM (after backup)
+  # Working directory path
+  workDir: "/workspace"
+  
+  # Retry configuration
+  config:
+    # Retry attempts for failed operations
+    retryAttempts: 3
+    # Retry delay between attempts
+    retryDelay: "5s"
+    # Log level (debug, info, warn, error)
+    logLevel: "info"
+  
+  # Resource limits and requests
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  # Node selector
+  nodeSelector:
+    kubernetes.io/os: linux
+  
+  # Tolerations
+  tolerations: []
+  
+  # Affinity
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+          - key: node-role.kubernetes.io/worker
+            operator: Exists
+
+# RBAC configuration
+rbac:
+  # Create RBAC resources
+  create: true
+  # Annotations for RBAC resources
+  annotations: {}
+
+# Service Account configuration
+serviceAccount:
+  # Create service account
+  create: true
+  # Annotations for service account
+  annotations: {}
+  # Name of the service account (if not created, must exist)
+  name: "cluster-backup"
+
+# OpenShift monitoring configuration
+monitoring:
+  # Enable monitoring components
+  enabled: true
+  
+  # Enable ServiceMonitor for Prometheus Operator
+  serviceMonitor:
+    enabled: true
+    # Additional labels for ServiceMonitor
+    labels: {}
+    # Scrape interval
+    interval: 30s
+    # Scrape timeout
+    scrapeTimeout: 10s
+  
+  # Enable PrometheusRule for alerting
+  prometheusRule:
+    enabled: true
+    # Additional labels for PrometheusRule
+    labels: {}
+    # Alert rules configuration
+    rules:
+      # Enable backup failure alerts
+      backupFailure: true
+      # Enable backup not running alerts
+      backupNotRunning: true
+      # Enable git sync failure alerts
+      gitSyncFailure: true
+      # Enable high backup duration alerts
+      highBackupDuration: true
+  
+  # Service configuration for metrics
+  service:
+    # Service type
+    type: ClusterIP
+    # Service port
+    port: 8080
+    # Additional annotations
+    annotations: {}
+
+# OpenShift security configuration
+security:
+  # Pod Security Context (OpenShift compatible)
+  podSecurityContext:
+    runAsNonRoot: true
+    # OpenShift assigns UID automatically
+    fsGroup: 1001
+  
+  # Container Security Context
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+  
+  # SecurityContextConstraints (OpenShift specific)
+  scc:
+    # Create custom SCC (optional - restricted-v2 is usually sufficient)
+    create: false
+    # Name of the SCC
+    name: "backup-scc"
+
+# Persistence configuration
+persistence:
+  # Enable persistence for working directories
+  enabled: true
+  # Storage class (empty = default)
+  storageClass: ""
+  # Access mode
+  accessMode: ReadWriteOnce
+  # Size for backup working directory
+  backupSize: 1Gi
+  # Size for git-sync working directory
+  gitSyncSize: 2Gi
+
+# OpenShift Routes configuration (optional)
+routes:
+  # Enable OpenShift Routes for metrics access
+  enabled: false
+  # Route for backup metrics
+  backup:
+    enabled: false
+    host: ""
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+  # Route for git-sync metrics
+  gitSync:
+    enabled: false
+    host: ""
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+
+# Additional configuration
+extra:
+  # Additional environment variables for backup service
+  backupEnvVars: {}
+  # Additional environment variables for git-sync service
+  gitSyncEnvVars: {}
+  # Additional labels for all resources
+  labels: {}
+  # Additional annotations for all resources
+  annotations: {}
+
+# Development and testing
+development:
+  # Enable development mode (disables some security features)
+  enabled: false
+  # Override image pull policy for development
+  imagePullPolicy: "IfNotPresent"
